@@ -19,6 +19,7 @@
 #include "pt_gs_k.h"
 #include "pt_ss_k.h"
 #include "pt_hs_k.h"
+#include "pt_us_k.h"
 
 // then include stuff you need like vector,shared, base_obj,nvp etc.
 
@@ -304,6 +305,19 @@ void shyft::core::gamma_snow::state::serialize(Archive & ar, const unsigned int 
         ;
 }
 template <class Archive>
+void shyft::core::universal_snow::state::serialize(Archive & ar, const unsigned int file_version) {
+    ar
+        & make_nvp("albedo", albedo)
+        & make_nvp("lwc", lwc)
+        & make_nvp("surface_heat",surface_heat )
+        & make_nvp("alpha", alpha)
+        & make_nvp("sdc_melt_mean",sdc_melt_mean )
+        & make_nvp("acc_melt",acc_melt )
+        & make_nvp("iso_pot_energy", iso_pot_energy)
+        & make_nvp("temp_swe",temp_swe )
+        ;
+}
+template <class Archive>
 void shyft::core::skaugen::state::serialize(Archive & ar, const unsigned int file_version) {
     ar
         & make_nvp("nu",nu)
@@ -327,6 +341,13 @@ template <class Archive>
 void shyft::core::pt_gs_k::state::serialize(Archive & ar, const unsigned int file_version) {
     ar
         & make_nvp("gs",gs)
+        & make_nvp("kirchner",kirchner)
+        ;
+}
+template <class Archive>
+void shyft::core::pt_us_k::state::serialize(Archive & ar, const unsigned int file_version) {
+    ar
+        & make_nvp("gs",us)
         & make_nvp("kirchner",kirchner)
         ;
 }
@@ -395,10 +416,12 @@ x_serialize_implement(shyft::core::hbv_snow::state);
 x_serialize_implement(shyft::core::hbv_soil::state);
 x_serialize_implement(shyft::core::hbv_tank::state);
 x_serialize_implement(shyft::core::gamma_snow::state);
+x_serialize_implement(shyft::core::universal_snow::state);
 x_serialize_implement(shyft::core::skaugen::state);
 x_serialize_implement(shyft::core::kirchner::state);
 
 x_serialize_implement(shyft::core::pt_gs_k::state);
+x_serialize_implement(shyft::core::pt_us_k::state);
 x_serialize_implement(shyft::core::pt_hs_k::state);
 x_serialize_implement(shyft::core::pt_ss_k::state);
 x_serialize_implement(shyft::core::hbv_stack::state);
@@ -453,10 +476,12 @@ x_arch(shyft::core::hbv_snow::state);
 x_arch(shyft::core::hbv_soil::state);
 x_arch(shyft::core::hbv_tank::state);
 x_arch(shyft::core::gamma_snow::state);
+x_arch(shyft::core::universal_snow::state);
 x_arch(shyft::core::skaugen::state);
 x_arch(shyft::core::kirchner::state);
 
 x_arch(shyft::core::pt_gs_k::state);
+x_arch(shyft::core::pt_us_k::state);
 x_arch(shyft::core::pt_hs_k::state);
 x_arch(shyft::core::pt_ss_k::state);
 x_arch(shyft::core::hbv_stack::state);

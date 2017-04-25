@@ -163,6 +163,9 @@
 		<Unit filename="pt_ss_k_cell_model.h">
 			<Option virtualFolder="method_stacks/" />
 		</Unit>
+		<Unit filename="pt_us_k.h">
+			<Option virtualFolder="method_stacks/" />
+		</Unit>
 		<Unit filename="region_model.h" />
 		<Unit filename="routing.h" />
 		<Unit filename="sceua_optimizer.cpp">
@@ -180,11 +183,14 @@
 		<Unit filename="time_series.h">
 			<Option virtualFolder="time_series/" />
 		</Unit>
-    <Unit filename="time_series_statistics.h">
-      <Option virtualFolder="time_series/" />
-    </Unit>
-    <Unit filename="unit_conversion.h">
+		<Unit filename="time_series_statistics.h">
+			<Option virtualFolder="time_series/" />
+		</Unit>
+		<Unit filename="unit_conversion.h">
 			<Option virtualFolder="compiler_etc/" />
+		</Unit>
+		<Unit filename="universal_snow.h">
+			<Option virtualFolder="methods/" />
 		</Unit>
 		<Unit filename="utctime_utilities.cpp">
 			<Option virtualFolder="time_and_calendar/" />
