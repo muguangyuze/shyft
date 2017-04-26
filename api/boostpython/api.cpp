@@ -16,6 +16,7 @@ namespace expose {
     extern void priestley_taylor();
     extern void actual_evapotranspiration();
     extern void gamma_snow();
+    extern void universal_snow();
     extern void kirchner();
     extern void precipitation_correction();
     extern void hbv_snow();
@@ -72,6 +73,7 @@ namespace expose {
         priestley_taylor();
         actual_evapotranspiration();
         gamma_snow();
+        universal_snow();
         skaugen_snow();
         hbv_snow();
         kirchner();
