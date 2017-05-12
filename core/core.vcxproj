@@ -142,6 +142,8 @@
     <ClInclude Include="pt_hs_k_cell_model.h" />
     <ClInclude Include="pt_ss_k.h" />
     <ClInclude Include="pt_ss_k_cell_model.h" />
+    <ClInclude Include="pt_us_k.h" />
+    <ClInclude Include="pt_us_k_cell_model.h" />
     <ClInclude Include="routing.h" />
     <ClInclude Include="sceua_optimizer.h" />
     <ClInclude Include="skaugen.h" />
@@ -150,6 +152,7 @@
     <ClInclude Include="time_axis.h" />
     <ClInclude Include="time_series_statistics.h" />
     <ClInclude Include="unit_conversion.h" />
+    <ClInclude Include="universal_snow.h" />
     <ClInclude Include="utctime_utilities.h" />
     <ClInclude Include="compiler_compatiblity.h" />
   </ItemGroup>
