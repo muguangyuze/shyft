@@ -70,8 +70,49 @@ using namespace shyft;
 using namespace shyfttest;
 
 typedef point_ts<time_axis::point_dt> xts_t;
+namespace shyfttest {
+    class ts_source {
+            utctime start;
+            utctimespan dt;
+            size_t n;
+          public:
+            ts_source(utctime start=no_utctime, utctimespan dt=0, size_t n=0) : start(start),dt(dt),n(n) {}
+            utcperiod total_period() const { return utcperiod(start,start+n*dt);}
+            size_t size() const { return n; }
+            utctimespan delta() const {return dt;}
 
-TEST_SUITE("time_series");
+            mutable size_t n_period_calls=0;
+            mutable size_t n_time_calls=0;
+            mutable size_t n_index_of_calls=0;
+            mutable size_t n_get_calls=0;
+            size_t total_calls()const {return n_get_calls+n_period_calls+n_time_calls+n_index_of_calls;}
+            void reset_call_count() {n_get_calls=n_period_calls=n_time_calls=n_index_of_calls=0;}
+
+            utcperiod operator()(size_t i) const {
+                n_period_calls++;
+                if(i>n) throw runtime_error("index out of range called");
+                return utcperiod(start + i*dt, start + (i + 1)*dt);
+            }
+            utctime   operator[](size_t i) const {
+                n_time_calls++;
+                if(i>n) throw runtime_error("index out of range called");
+                return utctime(start + i*dt);
+            }
+            point get(size_t i) const {
+                n_get_calls++;
+                if(i>n) throw runtime_error("index out of range called");
+
+                return point(start+i*dt,i);}
+            size_t index_of(utctime tx) const {
+                n_index_of_calls++;
+                if(tx < start) return string::npos;
+                auto ix = size_t((tx - start)/dt);
+                return ix < n ? ix : n - 1;
+            }
+        };
+};
+
+TEST_SUITE("time_series") {
 TEST_CASE("nan_min_max") {
 
 	FAST_CHECK_EQ(isfinite(nan_max(shyft::nan, shyft::nan)),false);
@@ -297,47 +338,6 @@ TEST_CASE("test_point_source_scale_by_value") {
     }
 }
 
-namespace shyfttest {
-    class ts_source {
-            utctime start;
-            utctimespan dt;
-            size_t n;
-          public:
-            ts_source(utctime start=no_utctime, utctimespan dt=0, size_t n=0) : start(start),dt(dt),n(n) {}
-            utcperiod total_period() const { return utcperiod(start,start+n*dt);}
-            size_t size() const { return n; }
-            utctimespan delta() const {return dt;}
-
-            mutable size_t n_period_calls=0;
-            mutable size_t n_time_calls=0;
-            mutable size_t n_index_of_calls=0;
-            mutable size_t n_get_calls=0;
-            size_t total_calls()const {return n_get_calls+n_period_calls+n_time_calls+n_index_of_calls;}
-            void reset_call_count() {n_get_calls=n_period_calls=n_time_calls=n_index_of_calls=0;}
-
-            utcperiod operator()(size_t i) const {
-                n_period_calls++;
-                if(i>n) throw runtime_error("index out of range called");
-                return utcperiod(start + i*dt, start + (i + 1)*dt);
-            }
-            utctime   operator[](size_t i) const {
-                n_time_calls++;
-                if(i>n) throw runtime_error("index out of range called");
-                return utctime(start + i*dt);
-            }
-            point get(size_t i) const {
-                n_get_calls++;
-                if(i>n) throw runtime_error("index out of range called");
-
-                return point(start+i*dt,i);}
-            size_t index_of(utctime tx) const {
-                n_index_of_calls++;
-                if(tx < start) return string::npos;
-                auto ix = size_t((tx - start)/dt);
-                return ix < n ? ix : n - 1;
-            }
-        };
-};
 TEST_CASE("test_hint_based_bsearch") {
     calendar utc;
     auto t=utc.time(YMDhms(2015,5,1,0,0,0));
@@ -932,6 +932,20 @@ TEST_CASE("test_ts_statistics_calculations") {
     TS_ASSERT_DELTA(r1[5].value(0), 9.0,0.0001);// "100-percentile");
     TS_ASSERT_DELTA(r1[6].value(0), 0.0, 0.0001);// "-1000 min xtreme");
     TS_ASSERT_DELTA(r1[7].value(0), 9.0, 0.0001);// "+1000 max xtreme");
+    SUBCASE("with_nan_ts") {
+        auto ts_w_nans=tts_t(ta,shyft::nan,POINT_AVERAGE_VALUE);
+        tsv1.push_back(ts_w_nans);
+        r1 = calculate_percentiles(tad, tsv1, {0,10,50,statistics_property::AVERAGE,70,100,statistics_property::MIN_EXTREME,statistics_property::MAX_EXTREME});
+        // nan are ignored(filtered out) by default
+        TS_ASSERT_DELTA(r1[0].value(0), 0.0,0.0001);// " 0-percentile");
+        TS_ASSERT_DELTA(r1[1].value(0), 0.9,0.0001);// "10-percentile");
+        TS_ASSERT_DELTA(r1[2].value(0), 4.5,0.0001);// "50-percentile");
+        TS_ASSERT_DELTA(r1[3].value(0), 4.5,0.0001);// "avg");
+        TS_ASSERT_DELTA(r1[4].value(0), 6.3,0.0001);// "70-percentile");
+        TS_ASSERT_DELTA(r1[5].value(0), 9.0,0.0001);// "100-percentile");
+        TS_ASSERT_DELTA(r1[6].value(0), 0.0, 0.0001);// "-1000 min xtreme");
+        TS_ASSERT_DELTA(r1[7].value(0), 9.0, 0.0001);// "+1000 max xtreme");
+    }
 }
 
 /** just verify that it calculate at full speed */
@@ -946,14 +960,19 @@ TEST_CASE("test_ts_statistics_speed") {
 	auto n_days = 7;// fewer for debug
 #endif
 	auto n_ts=83;
+	auto n_x=10;
     tta_t  ta(t0, calendar::HOUR, n_days*24);
     tta_t tad(t0, deltahours(24), n_days);
     auto tsv = create_test_ts(n_ts, ta, fx_1);
     std::vector<shyft::api::apoint_ts> tsv1;
     auto ts0 = shyft::api::apoint_ts(tsv[0].time_axis(), tsv[0].v, shyft::time_series::POINT_AVERAGE_VALUE);
 
-    for (size_t i=0;i<tsv.size();++i)
-        tsv1.push_back(shyft::api::apoint_ts(string("a_ref"))*ts0 - 1000.0);// make it an expression
+    for (size_t i=0;i<tsv.size();++i) {
+        shyft::api::apoint_ts tsi(string("a_ref"));
+            for(int j=0;j<n_x;++j)
+               tsi = tsi+ts0*1000.0;
+        tsv1.push_back(tsi);// make it an expression
+    }
 
     {
         std::vector<shyft::api::apoint_ts> bind_ts;
@@ -977,9 +996,9 @@ TEST_CASE("test_ts_statistics_speed") {
     vector<tts_t> r1;
 #if 1
     size_t diff_count = 0;
-    auto r0 = calculate_percentiles(tad, tsv1, { 0,10,50,-1,70,100 });
+    auto r0 = calculate_percentiles(tad, tsv1, { 0,10,50,-1,70,100,1000 });
     for (size_t i = 0;i < 10;++i) {
-        r1 = calculate_percentiles(tad, tsv1, { 0,10,50,-1,70,100 },1+n_days/10);
+        r1 = calculate_percentiles(tad, tsv1, { 0,10,50,-1,70,100,1000 },1+n_days/10);
         for (size_t j = 0;j < r1.size();++j) {
             auto diff_ts = (r1[j] - r0[j]);
             for (size_t t = 0;t < tad.size();++t) {
@@ -990,11 +1009,35 @@ TEST_CASE("test_ts_statistics_speed") {
     }
     TS_ASSERT_EQUALS(diff_count, size_t(0));
 #else
-    auto f1 = [&tad, &tsv1, &r1](int min_t_steps) {r1=calculate_percentiles(tad, tsv1, {0,10,50,-1,70,100},min_t_steps);};
-    for (int sz = tad.size(); sz > 100; sz /= 2) {
-        auto msec1 = measure<>::execution(f1,sz);
-        if(verbose) cout<<"statistics speed tests, "<< tad.size() <<" steps, pr.thread = "<< sz << " steps: "<< msec1 << " ms" <<endl;
+
+    vector<api::gts_t> tsv2;
+    auto deflatten_tsv=[&tsv2,&tsv1]() {
+        tsv2=api::deflate_ts_vector<api::gts_t>(tsv1);
+    };
+    auto msec_cpy = measure<>::execution(deflatten_tsv);
+    if(verbose) cout<<"1 x flatten expression took:"<<msec_cpy<<"ms\n";
+
+    vector<vector<int>> ppx;
+    ppx.push_back( { 0,10,50,-1,70,+100});
+    ppx.push_back( {-1000,10,50,-1,70,+1000});
+    ppx.push_back( {-1000,0,10,50,-1,70,100,+1000});
+    for(size_t pi=0;pi<3;++pi) {
+        auto pct=ppx[pi];
+        auto f1 = [&tad, &tsv1, &r1,&pct](int min_t_steps) {r1=calculate_percentiles(tad, tsv1,pct,min_t_steps);};
+        for (int n_threads = 1; n_threads< 11 ; n_threads += 2) {
+            int sz=tad.size()/n_threads;
+            auto msec1 = measure<>::execution(f1,sz);
+            if(verbose) cout<<"A.statistics speed tests#"<<pi<<"[ "<<n_threads<<"] "<< tad.size() <<" steps, pr.thread = "<< sz << " steps: "<< msec1 << " ms" <<endl;
+        }
+        vector<tts_t> r2;
+        auto f2 = [&tad, &tsv2, &r2,&pct](int min_t_steps) {r2=calculate_percentiles(tad, tsv2, pct,min_t_steps);};
+        for (int n_threads = 1; n_threads< 11 ; n_threads += 2) {
+            int sz=tad.size()/n_threads;
+            auto msec1 = measure<>::execution(f2,sz);
+            if(verbose) cout<<"C.statistics speed tests #"<<pi<<"[ "<<n_threads<<"] "<< tad.size() <<" steps, pr.thread = "<< sz << " steps: "<< msec1 << " ms" <<endl;
+        }
     }
+
 #endif
     //auto msec2= measure<>::execution(f1,tad.size()/4);
     //cout<<"Done statistics speed tests,2 threads "<<msec2<<" ms"<<endl;
@@ -1409,4 +1452,4 @@ TEST_CASE("test_uniform_sum_ts") {
 	}
 }
 
-TEST_SUITE_END();
+}
