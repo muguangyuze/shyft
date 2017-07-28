@@ -140,6 +140,14 @@
     </ClInclude>
     <ClInclude Include="pt_us_k_cell_model.h">
       <Filter>method-stacks</Filter>
+    <ClInclude Include="time_series_merge.h">
+      <Filter>time_series</Filter>
+    </ClInclude>
+    <ClInclude Include="time_series_qm.h">
+      <Filter>time_series</Filter>
+    </ClInclude>
+    <ClInclude Include="time_series_info.h">
+      <Filter>time_series</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

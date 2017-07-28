@@ -9,6 +9,7 @@
 #include "core/utctime_utilities.h"
 #include "core/time_axis.h"
 #include "api/time_series.h"
+#include <regex>
 
 using namespace std;
 using namespace shyft;
@@ -16,8 +17,8 @@ using namespace shyft::core;
 
 api::apoint_ts mk_expression(utctime t, utctimespan dt, int n) {
 
-    std::vector<double> x;x.reserve(n);
-    for (int i = 0;i < n;++i)
+    std::vector<double> x; x.reserve(n);
+    for (int i = 0; i < n; ++i)
         x.push_back(-double(n) / 2.0 + i);
     api::apoint_ts aa(api::gta_t(t, dt, n), x);
     auto a = aa*3.0 + aa;
@@ -44,11 +45,11 @@ TEST_CASE("dlib_server_basics") {
         shyft::time_axis::fixed_dt ta(t, dt, n);
         api::gta_t ta24(t, dt24, n24);
         bool throw_exception = false;
-        call_back_t cb = [ta, &throw_exception](id_vector_t ts_ids, core::utcperiod p)
+        read_call_back_t cb = [ta, &throw_exception](id_vector_t ts_ids, core::utcperiod p)
             ->ts_vector_t {
-            ts_vector_t r;r.reserve(ts_ids.size());
+            ts_vector_t r; r.reserve(ts_ids.size());
             double fv = 1.0;
-            for (size_t i = 0;i < ts_ids.size();++i)
+            for (size_t i = 0; i < ts_ids.size(); ++i)
                 r.emplace_back(ta, fv += 1.0);
             if (throw_exception) {
                 dlog << dlib::LINFO << "Throw from inside dtss executes!";
@@ -56,7 +57,26 @@ TEST_CASE("dlib_server_basics") {
             }
             return r;
         };
-        server our_server(cb);
+        std::vector<std::string> ts_names = {
+            string("a.prod.mw"),
+            string("b.prod.mw")
+        };
+        find_call_back_t fcb = [&ts_names, &throw_exception](std::string search_expression)
+            ->ts_info_vector_t {
+            ts_info_vector_t r;
+            dlog << dlib::LINFO << "find-callback with search-string:" << search_expression;
+            std::regex re(search_expression);
+            auto match_end = std::sregex_iterator();
+            for (auto const&tsn : ts_names) {
+                if (std::sregex_iterator(tsn.begin(), tsn.end(), re)!= match_end) {
+                    ts_info tsi; tsi.name = tsn;
+                    r.push_back(tsi);
+                }
+            }
+            return r;
+        };
+
+        server our_server(cb,fcb);
 
         // set up the server object we have made
         our_server.set_listening_ip("127.0.0.1");
@@ -82,6 +102,13 @@ TEST_CASE("dlib_server_basics") {
             FAST_REQUIRE_UNARY(our_server.is_running());
             dtss.evaluate(tsl, ta.period(0));
             dlog << dlib::LINFO << "done second test";
+            // test search functions
+            dlog << dlib::LINFO << "test .find function";
+            auto found_ts = dtss.find(string("a.*"));
+            FAST_REQUIRE_EQ(found_ts.size(), 1);
+            FAST_CHECK_EQ(found_ts[0].name, ts_names[0]);
+            dlog << dlib::LINFO << "test .find function done";
+
             throw_exception = true;// verify server-side exception gets back here.
             TS_ASSERT_THROWS_ANYTHING(dtss.evaluate(tsl, ta.period(0)));
             dlog<<dlib::LINFO << "exceptions done,testing ordinary evaluate after exception";
@@ -117,20 +144,22 @@ TEST_CASE("dlib_server_performance") {
         auto dt24 = deltahours(24);
         int n = 24 * 365 * 5;//24*365*5;
         int n24 = n / 24;
+		int n_ts = 83;
         shyft::time_axis::fixed_dt ta(t, dt, n);
         api::gta_t ta24(t, dt24, n24);
         bool throw_exception = false;
-        call_back_t cb = [ta, &throw_exception](id_vector_t ts_ids, core::utcperiod p)
+		ts_vector_t from_disk; from_disk.reserve(n_ts);
+		double fv = 1.0;
+		for (int i = 0; i < n_ts; ++i)
+			from_disk.emplace_back(ta, fv += 1.0,shyft::time_series::ts_point_fx::POINT_AVERAGE_VALUE);
+
+        read_call_back_t cb = [&from_disk, &throw_exception](id_vector_t ts_ids, core::utcperiod p)
             ->ts_vector_t {
-            ts_vector_t r;r.reserve(ts_ids.size());
-            double fv = 1.0;
-            for (size_t i = 0;i < ts_ids.size();++i)
-                r.emplace_back(ta, fv += 1.0);
             if (throw_exception) {
                 dlog << dlib::LINFO << "Throw from inside dtss executes!";
                 throw std::runtime_error("test exception");
             }
-            return r;
+            return from_disk;
         };
         server our_server(cb);
 
@@ -144,24 +173,34 @@ TEST_CASE("dlib_server_performance") {
         vector<future<void>> clients;
         for (size_t i = 0;i < n_threads;++i) {
             clients.emplace_back(
-                    async(launch::async, [port_no,ta,ta24,i]()         /** thread this */ {
+                    async(launch::async, [port_no,ta,ta24,i,n_ts]()         /** thread this */ {
                     string host_port = string("localhost:") + to_string(port_no);
                     dlog << dlib::LINFO << "sending an expression ts to " << host_port;
                     std::vector<api::apoint_ts> tsl;
-                    for (size_t x = 1;x <= 83;++x) // just make a  very thin request, that get loads of data back
-                        tsl.push_back(api::apoint_ts(string("netcdf://group/path/ts_") + std::to_string(x)));
+					for (int x = 1; x <= n_ts; ++x) {// just make a  very thin request, that get loads of data back
+#if 0
+						auto ts_expr = api::apoint_ts(string("netcdf://group/path/ts_") + std::to_string(x));
+						tsl.push_back(ts_expr);
+#else
+						auto ts_expr = 10.0 + 3.0*api::apoint_ts(string("netcdf://group/path/ts_") + std::to_string(x));
+						if (x > 1) {
+							ts_expr = ts_expr - 3.0*api::apoint_ts(string("netcdf://group/path/ts_") + std::to_string(x - 1));
+						}
+						tsl.push_back(ts_expr.average(ta));
+#endif
+					}
 
                     client dtss(host_port);
                     auto t0 = timing::now();
                     size_t eval_count = 0;
-                    int test_duration_ms = 10000;
+                    int test_duration_ms = 5000;
                     int kilo_points= tsl.size()*ta.size()/1000;
                     while (elapsed_ms(t0, timing::now()) < test_duration_ms) {
                         // burn cpu server side, save time on serialization
-                        //std::vector<int> percentile_spec{ 0,25,50,-1,75,100 };
-                        //auto percentiles = dtss.percentiles(tsl, ta.total_period(), ta24, percentile_spec);
+                        std::vector<int> percentile_spec{ -1 };
+                        auto percentiles = dtss.percentiles(tsl, ta.total_period(), ta24, percentile_spec);
                         //slower due to serialization:
-                        auto ts_b = dtss.evaluate(tsl, ta.total_period());
+                        //auto ts_b = dtss.evaluate(tsl, ta.total_period());
                         ++eval_count;
                     }
                     auto total_ms = double(elapsed_ms(t0, timing::now()));

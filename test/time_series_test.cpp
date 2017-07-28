@@ -60,6 +60,7 @@ namespace shyfttest {
             void set(size_t i, point p) { points[i] = p; }
             void add_point(const point& p) {points.emplace_back(p);}
             void reserve(size_t sz) {points.reserve(sz);}
+            utcperiod total_period() const { return utcperiod(points.front().t, points.back().t); }
         };
 
 } // namespace test
@@ -71,47 +72,191 @@ using namespace shyfttest;
 
 typedef point_ts<time_axis::point_dt> xts_t;
 namespace shyfttest {
-    class ts_source {
-            utctime start;
-            utctimespan dt;
-            size_t n;
-          public:
-            ts_source(utctime start=no_utctime, utctimespan dt=0, size_t n=0) : start(start),dt(dt),n(n) {}
-            utcperiod total_period() const { return utcperiod(start,start+n*dt);}
-            size_t size() const { return n; }
-            utctimespan delta() const {return dt;}
+	class ts_source {
+		utctime start;
+		utctimespan dt;
+		size_t n;
+	public:
+		ts_source(utctime start = no_utctime, utctimespan dt = 0, size_t n = 0) : start(start), dt(dt), n(n) {}
+		utcperiod total_period() const { return utcperiod(start, start + n*dt); }
+		size_t size() const { return n; }
+		utctimespan delta() const { return dt; }
 
-            mutable size_t n_period_calls=0;
-            mutable size_t n_time_calls=0;
-            mutable size_t n_index_of_calls=0;
-            mutable size_t n_get_calls=0;
-            size_t total_calls()const {return n_get_calls+n_period_calls+n_time_calls+n_index_of_calls;}
-            void reset_call_count() {n_get_calls=n_period_calls=n_time_calls=n_index_of_calls=0;}
+		mutable size_t n_period_calls = 0;
+		mutable size_t n_time_calls = 0;
+		mutable size_t n_index_of_calls = 0;
+		mutable size_t n_get_calls = 0;
+		size_t total_calls()const { return n_get_calls + n_period_calls + n_time_calls + n_index_of_calls; }
+		void reset_call_count() { n_get_calls = n_period_calls = n_time_calls = n_index_of_calls = 0; }
 
-            utcperiod operator()(size_t i) const {
-                n_period_calls++;
-                if(i>n) throw runtime_error("index out of range called");
-                return utcperiod(start + i*dt, start + (i + 1)*dt);
-            }
-            utctime   operator[](size_t i) const {
-                n_time_calls++;
-                if(i>n) throw runtime_error("index out of range called");
-                return utctime(start + i*dt);
-            }
-            point get(size_t i) const {
-                n_get_calls++;
-                if(i>n) throw runtime_error("index out of range called");
+		utcperiod operator()(size_t i) const {
+			n_period_calls++;
+			if (i > n) throw runtime_error("index out of range called");
+			return utcperiod(start + i*dt, start + (i + 1)*dt);
+		}
+		utctime   operator[](size_t i) const {
+			n_time_calls++;
+			if (i > n) throw runtime_error("index out of range called");
+			return utctime(start + i*dt);
+		}
+		point get(size_t i) const {
+			n_get_calls++;
+			if (i > n) throw runtime_error("index out of range called");
 
-                return point(start+i*dt,i);}
-            size_t index_of(utctime tx) const {
-                n_index_of_calls++;
-                if(tx < start) return string::npos;
-                auto ix = size_t((tx - start)/dt);
-                return ix < n ? ix : n - 1;
+			return point(start + i*dt, i);
+		}
+		size_t index_of(utctime tx) const {
+			n_index_of_calls++;
+			if (tx < start) return string::npos;
+			auto ix = size_t((tx - start) / dt);
+			return ix < n ? ix : n - 1;
+		}
+	};
+
+
+};
+using namespace shyft::core;
+using namespace shyft::time_series;
+/// average_value_staircase_fast:
+/// Just keept for the reference now, but
+/// the generic/complex does execute at similar speed
+/// combining linear/stair-case into one function.
+//
+        template <class S>
+        double average_value_staircase_fast(const S& source, const utcperiod& p, size_t& last_idx) {
+            const size_t n=source.size();
+            if (n == 0) // early exit if possible
+                return shyft::nan;
+            size_t i=hint_based_search(source,p,last_idx);  // use last_idx as hint, allowing sequential periodic average to execute at high speed(no binary searches)
+
+            if(i==std::string::npos) // this might be a case
+                return shyft::nan; // and is equivalent to no points, or all points after requested period.
+
+            point l;          // Left point
+            l = source.get(i);
+            if (l.t >= p.end) { // requested period before first point,
+                last_idx=i;
+                return shyft::nan; // defined to return nan
             }
-        };
+
+            if(l.t<p.start) l.t=p.start;//project left value to start of interval
+            if(!std::isfinite(l.v))
+                l.v=0.0;// nan-is 0 kind of def. fixes issues if period start with some nan-points, then area will be zero until first point..
+
+            if( ++i >= n) { // advance to next point and check for early exit
+                last_idx=--i;
+                return l.v*(p.end-l.t)/p.timespan(); // nan-is 0 kind of def..
+            }
+            double area = 0.0;  // Integrated area
+            point r(l);
+            do {
+                if( i<n ) { // if possible, advance to next point
+                    r=source.get(i++);
+                    if(r.t>p.end)
+                        r.t=p.end;//clip to p.end to ensure correct integral time-range
+                } else {
+                    r.t=p.end; // else set right hand side time to p.end(we are done)
+                }
+                area += l.v*(r.t -l.t);// add area for the current stair-case
+                if(std::isfinite(r.v)) { // could be a new value, which establish the new stair-case
+                    l=r;
+                } else { // not a valid new value, so
+                    l.t=r.t;// just keep l.value, adjust time(ignore nans)
+                }
+            } while(l.t < p.end );
+            last_idx = --i; // Store last index, so that next call starts at a smart position.
+            return area/p.timespan();
+        }
+
+template <class S, class TA>
+class average_staircase_accessor_fast {
+private:
+	static const size_t npos = -1;  // msc doesn't allow this std::basic_string::npos;
+	mutable size_t last_idx;
+	mutable size_t q_idx;// last queried index
+	mutable double q_value;// outcome of
+	const TA& time_axis;
+	const S& source;
+public:
+	average_staircase_accessor_fast(const S& source, const TA& time_axis)
+		: last_idx(0), q_idx(npos), q_value(0.0), time_axis(time_axis), source(source) { /* Do nothing */
+	}
+
+
+	double value(const size_t i) const {
+		if (i == q_idx)
+			return q_value;// 1.level cache, asking for same value n-times, have cost of 1.
+		q_value = average_value_staircase_fast(source, time_axis.period(q_idx = i), last_idx);
+		return q_value;
+	}
+
+	size_t size() const { return time_axis.size(); }
 };
 
+template <class A,class B>
+static bool is_equal_ts(const A& a,const B& b) {
+    const auto &a_ta=a.time_axis();
+    const auto &b_ta=b.time_axis();
+    if(a_ta.size()!=b_ta.size())
+        return false;
+    for(size_t i=0;i<a_ta.size();++i) {
+        if(a_ta.period(i)!= b_ta.period(i))
+            return false;
+        if (fabs(a.value(i)-b.value(i))>1e-6)
+            return false;
+    }
+    return true;
+}
+
+template < class TS_E,class TS_A,class TS_B,class TA>
+static void test_bin_op(const TS_A& a, const TS_B &b, const TA ta,double a_value,double b_value) {
+    // Expected results are time-series with ta and a constant value equal to the standard operators
+    TS_E a_plus_b(ta,a_value+b_value);
+    TS_E a_minus_b(ta,a_value-b_value);
+    TS_E a_mult_b(ta,a_value*b_value);
+    TS_E a_div_b(ta,a_value/b_value);
+    TS_E max_a_b(ta,std::max(a_value,b_value));
+    TS_E min_a_b(ta,std::min(a_value,b_value));
+    // Step 1:   ts bin_op ts
+    TS_ASSERT(is_equal_ts(a_plus_b,a+b));
+    TS_ASSERT(is_equal_ts(a_minus_b,a-b));
+    TS_ASSERT(is_equal_ts(a_mult_b,a*b));
+    TS_ASSERT(is_equal_ts(a_div_b,a/b));
+    TS_ASSERT(is_equal_ts(max_a_b,max(a,b)));
+    TS_ASSERT(is_equal_ts(min_a_b,min(a,b)));
+    // Step 2:  ts bin_op double
+    TS_ASSERT(is_equal_ts(a_plus_b,a+b_value));
+    TS_ASSERT(is_equal_ts(a_minus_b,a-b_value));
+    TS_ASSERT(is_equal_ts(a_mult_b,a*b_value));
+    TS_ASSERT(is_equal_ts(a_div_b,a/b_value));
+    TS_ASSERT(is_equal_ts(max_a_b,max(a,b_value)));
+    TS_ASSERT(is_equal_ts(min_a_b,min(a,b_value)));
+    // Step 3: double bin_op ts
+    TS_ASSERT(is_equal_ts(a_plus_b,a_value+b));
+    TS_ASSERT(is_equal_ts(a_minus_b,a_value-b));
+    TS_ASSERT(is_equal_ts(a_mult_b,a_value*b));
+    TS_ASSERT(is_equal_ts(a_div_b,a_value/b));
+    TS_ASSERT(is_equal_ts(max_a_b,max(a_value,b)));
+    TS_ASSERT(is_equal_ts(min_a_b,min(a_value,b)));
+
+}
+
+
+
+typedef shyft::time_axis::fixed_dt tta_t;
+typedef shyft::time_series::point_ts<tta_t> tts_t;
+
+template<typename Fx>
+std::vector<tts_t> create_test_ts(size_t n,tta_t ta, Fx&& f) {
+    std::vector<tts_t> r;r.reserve(n);
+    for (size_t i = 0;i < n;++i) {
+        std::vector<double> v;v.reserve(ta.size());
+        for (size_t j = 0;j < ta.size();++j)
+            v.push_back(f(i, ta.time(j)));
+        r.push_back(tts_t(ta, v));
+    }
+    return std::move(r);
+}
 TEST_SUITE("time_series") {
 TEST_CASE("nan_min_max") {
 
@@ -566,84 +711,29 @@ TEST_CASE("test_average_value_linear_between_points") {
 }
 
 
-using namespace shyft::core;
-using namespace shyft::time_series;
-/// average_value_staircase_fast:
-/// Just keept for the reference now, but
-/// the generic/complex does execute at similar speed
-/// combining linear/stair-case into one function.
-//
-        template <class S>
-        double average_value_staircase_fast(const S& source, const utcperiod& p, size_t& last_idx) {
-            const size_t n=source.size();
-            if (n == 0) // early exit if possible
-                return shyft::nan;
-            size_t i=hint_based_search(source,p,last_idx);  // use last_idx as hint, allowing sequential periodic average to execute at high speed(no binary searches)
+TEST_CASE("accessor_policy") {
+	vector<double> v{1.0,2.0,2.5};
+	time_axis::fixed_dt ts_ta(calendar().time(2000, 1, 1, 0, 0, 0), deltahours(1), v.size());
+	time_axis::fixed_dt ta(calendar().time(2000, 1, 1, 0, 0, 0), deltahours(1), v.size()+2); // two more steps
+    time_series::point_ts<time_axis::fixed_dt> ts(ts_ta,v,ts_point_fx::POINT_AVERAGE_VALUE);
+    SUBCASE("average") {
+        time_series::average_accessor<decltype(ts),decltype(ta)> a_default(ts,ta);
+        time_series::average_accessor<decltype(ts),decltype(ta)> a_nan(ts,ta,extension_policy::USE_NAN);
+        time_series::average_accessor<decltype(ts),decltype(ta)> a_0(ts,ta,extension_policy::USE_ZERO);
+        CHECK(a_default.value(ta.size()-1)==doctest::Approx(2.5));
+        CHECK(a_0.value(ta.size()-1)==doctest::Approx(0.0));
+        CHECK(!std::isfinite(a_nan.value(ta.size()-1)));
+    }
+    SUBCASE("accumulate") {
+        time_series::accumulate_accessor<decltype(ts),decltype(ta)> a_default(ts,ta);
+        time_series::accumulate_accessor<decltype(ts),decltype(ta)> a_nan(ts,ta,extension_policy::USE_NAN);
+        time_series::accumulate_accessor<decltype(ts),decltype(ta)> a_0(ts,ta,extension_policy::USE_ZERO);
+        CHECK(a_default.value(ta.size()-1)==doctest::Approx(deltahours(1)*(1.0+2.0+2.5+2.5)));
+        CHECK(a_0.value(ta.size()-1)==doctest::Approx(deltahours(1)*(1.0+2.0+2.5)));
+        CHECK(!std::isfinite(a_nan.value(ta.size()-1)));
+    }
+}
 
-            if(i==std::string::npos) // this might be a case
-                return shyft::nan; // and is equivalent to no points, or all points after requested period.
-
-            point l;          // Left point
-            l = source.get(i);
-            if (l.t >= p.end) { // requested period before first point,
-                last_idx=i;
-                return shyft::nan; // defined to return nan
-            }
-
-            if(l.t<p.start) l.t=p.start;//project left value to start of interval
-            if(!std::isfinite(l.v))
-                l.v=0.0;// nan-is 0 kind of def. fixes issues if period start with some nan-points, then area will be zero until first point..
-
-            if( ++i >= n) { // advance to next point and check for early exit
-                last_idx=--i;
-                return l.v*(p.end-l.t)/p.timespan(); // nan-is 0 kind of def..
-            }
-            double area = 0.0;  // Integrated area
-            point r(l);
-            do {
-                if( i<n ) { // if possible, advance to next point
-                    r=source.get(i++);
-                    if(r.t>p.end)
-                        r.t=p.end;//clip to p.end to ensure correct integral time-range
-                } else {
-                    r.t=p.end; // else set right hand side time to p.end(we are done)
-                }
-                area += l.v*(r.t -l.t);// add area for the current stair-case
-                if(std::isfinite(r.v)) { // could be a new value, which establish the new stair-case
-                    l=r;
-                } else { // not a valid new value, so
-                    l.t=r.t;// just keep l.value, adjust time(ignore nans)
-                }
-            } while(l.t < p.end );
-            last_idx = --i; // Store last index, so that next call starts at a smart position.
-            return area/p.timespan();
-        }
-
-template <class S, class TA>
-class average_staircase_accessor_fast {
-private:
-	static const size_t npos = -1;  // msc doesn't allow this std::basic_string::npos;
-	mutable size_t last_idx;
-	mutable size_t q_idx;// last queried index
-	mutable double q_value;// outcome of
-	const TA& time_axis;
-	const S& source;
-public:
-	average_staircase_accessor_fast(const S& source, const TA& time_axis)
-		: last_idx(0), q_idx(npos), q_value(0.0), time_axis(time_axis), source(source) { /* Do nothing */
-	}
-
-	size_t get_last_index() { return last_idx; }  // TODO: Testing utility, remove later.
-
-	double value(const size_t i) const {
-		if (i == q_idx)
-			return q_value;// 1.level cache, asking for same value n-times, have cost of 1.
-		q_value = average_value_staircase_fast(source, time_axis.period(q_idx = i), last_idx);
-		return q_value;
-	}
-
-	size_t size() const { return time_axis.size(); }
-};
 
 TEST_CASE("test_TxFxSource") {
     utctime t0 = calendar().time(YMDhms(1940, 1, 1, 0,0, 0));
@@ -735,54 +825,6 @@ TEST_CASE("test_sin_fx_ts") {
 	TS_ASSERT_DELTA(tsfx(0), 10.0, 0.0000001);
 	TS_ASSERT_DELTA(tsfx(deltahours(24)), 10.0, 0.0000001);
 	TS_ASSERT_DELTA(tsfx(deltahours(18)), 0.0, 0.000001);
-}
-
-template <class A,class B>
-static bool is_equal_ts(const A& a,const B& b) {
-    const auto &a_ta=a.time_axis();
-    const auto &b_ta=b.time_axis();
-    if(a_ta.size()!=b_ta.size())
-        return false;
-    for(size_t i=0;i<a_ta.size();++i) {
-        if(a_ta.period(i)!= b_ta.period(i))
-            return false;
-        if (fabs(a.value(i)-b.value(i))>1e-6)
-            return false;
-    }
-    return true;
-}
-
-template < class TS_E,class TS_A,class TS_B,class TA>
-static void test_bin_op(const TS_A& a, const TS_B &b, const TA ta,double a_value,double b_value) {
-    // Expected results are time-series with ta and a constant value equal to the standard operators
-    TS_E a_plus_b(ta,a_value+b_value);
-    TS_E a_minus_b(ta,a_value-b_value);
-    TS_E a_mult_b(ta,a_value*b_value);
-    TS_E a_div_b(ta,a_value/b_value);
-    TS_E max_a_b(ta,std::max(a_value,b_value));
-    TS_E min_a_b(ta,std::min(a_value,b_value));
-    // Step 1:   ts bin_op ts
-    TS_ASSERT(is_equal_ts(a_plus_b,a+b));
-    TS_ASSERT(is_equal_ts(a_minus_b,a-b));
-    TS_ASSERT(is_equal_ts(a_mult_b,a*b));
-    TS_ASSERT(is_equal_ts(a_div_b,a/b));
-    TS_ASSERT(is_equal_ts(max_a_b,max(a,b)));
-    TS_ASSERT(is_equal_ts(min_a_b,min(a,b)));
-    // Step 2:  ts bin_op double
-    TS_ASSERT(is_equal_ts(a_plus_b,a+b_value));
-    TS_ASSERT(is_equal_ts(a_minus_b,a-b_value));
-    TS_ASSERT(is_equal_ts(a_mult_b,a*b_value));
-    TS_ASSERT(is_equal_ts(a_div_b,a/b_value));
-    TS_ASSERT(is_equal_ts(max_a_b,max(a,b_value)));
-    TS_ASSERT(is_equal_ts(min_a_b,min(a,b_value)));
-    // Step 3: double bin_op ts
-    TS_ASSERT(is_equal_ts(a_plus_b,a_value+b));
-    TS_ASSERT(is_equal_ts(a_minus_b,a_value-b));
-    TS_ASSERT(is_equal_ts(a_mult_b,a_value*b));
-    TS_ASSERT(is_equal_ts(a_div_b,a_value/b));
-    TS_ASSERT(is_equal_ts(max_a_b,max(a_value,b)));
-    TS_ASSERT(is_equal_ts(min_a_b,min(a_value,b)));
-
 }
 
 TEST_CASE("test_binary_operator") {
@@ -896,20 +938,6 @@ TEST_CASE("test_api_ts") {
     TS_ASSERT_DELTA(d.value(0),b_value+b_value,0.00001);
 }
 
-typedef shyft::time_axis::fixed_dt tta_t;
-typedef shyft::time_series::point_ts<tta_t> tts_t;
-
-template<typename Fx>
-std::vector<tts_t> create_test_ts(size_t n,tta_t ta, Fx&& f) {
-    std::vector<tts_t> r;r.reserve(n);
-    for (size_t i = 0;i < n;++i) {
-        std::vector<double> v;v.reserve(ta.size());
-        for (size_t j = 0;j < ta.size();++j)
-            v.push_back(f(i, ta.time(j)));
-        r.push_back(tts_t(ta, v));
-    }
-    return std::move(r);
-}
 
 /** just verify that it calculate the right things */
 TEST_CASE("test_ts_statistics_calculations") {
@@ -1251,6 +1279,39 @@ TEST_CASE("test_accumulate_ts_and_accessor") {
 	// the accessor should be smart, trying to re-use prior computation, I verify the result here,
 	TS_ASSERT_DELTA(1.0*deltahours(2), aa.value(2), 0.0001);// and using step-debug to verify it's really doing the right thing
 }
+TEST_CASE("core_average_ts") {
+	calendar utc;
+	auto t = utc.time(2015, 5, 1, 0, 0, 0);
+	auto d = deltahours(3);
+	size_t n = 10;
+	vector<double> values;for (size_t i = 0;i < n;++i) values.emplace_back(i != 5 ? i*1.0 : shyft::nan);//0, 1,2,4,nan,6..9
+																										//Two equal time_axis::fixed_dt representations
+	time_axis::fixed_dt ta(t, d, n);
+	point_ts<time_axis::fixed_dt> a(ta, values, ts_point_fx::POINT_INSTANT_VALUE);// so a is a straight increasing line
+
+	time_axis::fixed_dt ta3(t,d/3,n*3);//hourly time-axis
+	average_ts<point_ts<time_axis::fixed_dt>, time_axis::fixed_dt> ats(a, ta3);
+    FAST_REQUIRE_EQ(ta3.size(),ats.size());
+    vector<double> expected{
+    0.0 + 0.166666, 0.0 + 0.5, 0.0 + 0.833333,
+    1.0 + 0.166666, 1.0 + 0.5, 1.0 + 0.833333,
+    2.0 + 0.166666, 2.0 + 0.5, 2.0 + 0.833333,
+    3.0 + 0.166666, 3.0 + 0.5, 3.0 + 0.833333,
+    4.0, 4.0, 4.0,
+    shyft::nan, shyft::nan, shyft::nan,
+    6.0 + 0.166666, 6.0 + 0.5, 6.0 + 0.833333,
+    7.0 + 0.166666, 7.0 + 0.5, 7.0 + 0.833333,
+    8.0 + 0.166666, 8.0 + 0.5, 8.0 + 0.833333,
+    9.0, 9.0, 9.0
+    };
+    for(size_t i=0;i<ats.size();++i) {
+        if(i/3==5) {
+            FAST_CHECK_EQ(std::isfinite(ats.value(i)),false);
+        } else {
+            TS_ASSERT_DELTA(ats.value(i) , expected[i], 0.001);
+        }
+    }
+}
 
 TEST_CASE("test_partition_by") {
 	calendar utc;
@@ -1451,7 +1512,5 @@ TEST_CASE("test_uniform_sum_ts") {
 		TS_ASSERT_DELTA(sum_ts.value(t)+sum_ts.value(t), cc.value(t), 0.0001);
 	}
 }
-TEST_CASE("ts_vector_operations") {
 
-}
 }

@@ -111,6 +111,9 @@
     </ClCompile>
     <ClCompile Include="universal_snow_test.cpp">
       <Filter>methods</Filter>
+    <ClCompile Include="qm_test.cpp" />
+    <ClCompile Include="merge_test.cpp">
+      <Filter>time_series</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
