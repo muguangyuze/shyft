@@ -148,6 +148,7 @@
 		</Unit>
 		<Unit filename="pt_us_k_test.cpp">
 			<Option virtualFolder="method_stacks/" />
+        </Unit>
 		<Unit filename="qm_test.cpp">
 			<Option virtualFolder="time_series/" />
 		</Unit>
