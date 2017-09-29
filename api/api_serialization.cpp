@@ -206,6 +206,7 @@ x_serialize_implement(shyft::api::cell_state_with_id<shyft::core::pt_gs_k::state
 x_serialize_implement(shyft::api::cell_state_with_id<shyft::core::pt_ss_k::state>);
 x_serialize_implement(shyft::api::cell_state_with_id<shyft::core::pt_hs_k::state>);
 x_serialize_implement(shyft::api::cell_state_with_id<shyft::core::pt_us_k::state>);
+x_serialize_implement(shyft::api::cell_state_with_id<shyft::core::pt_hps_k::state>);
 x_serialize_implement(shyft::api::ats_vector);
 //
 // 4. Then include the archive supported
@@ -236,6 +237,7 @@ x_arch(shyft::api::cell_state_with_id<shyft::core::pt_gs_k::state>);
 x_arch(shyft::api::cell_state_with_id<shyft::core::pt_ss_k::state>);
 x_arch(shyft::api::cell_state_with_id<shyft::core::pt_hs_k::state>);
 x_arch(shyft::api::cell_state_with_id<shyft::core::pt_us_k::state>);
+x_arch(shyft::api::cell_state_with_id<shyft::core::pt_hps_k::state>);
 x_arch(shyft::api::ats_vector);
 
 std::string shyft::api::apoint_ts::serialize() const {
@@ -272,6 +274,7 @@ namespace shyft {
         template std::vector<char> serialize_to_bytes(const std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_ss_k::state>>>& states);// { return serialize_to_bytes_impl(states); }
         template std::vector<char> serialize_to_bytes(const std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_hs_k::state>>>& states);// { return serialize_to_bytes_impl(states); }
         template std::vector<char> serialize_to_bytes(const std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_us_k::state>>>& states);// { return serialize_to_bytes_impl(states); }
+        template std::vector<char> serialize_to_bytes(const std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_hps_k::state>>>& states);// { return serialize_to_bytes_impl(states); }
 
         template <class CS>
         void deserialize_from_bytes(const std::vector<char>& bytes, std::shared_ptr<std::vector<CS>>&states) {
@@ -286,5 +289,6 @@ namespace shyft {
         template void deserialize_from_bytes(const std::vector<char>& bytes, std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_hs_k::state>>>&states);// { deserialize_from_bytes_impl(bytes, states); }
         template void deserialize_from_bytes(const std::vector<char>& bytes, std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_ss_k::state>>>&states);// { deserialize_from_bytes_impl(bytes, states); }
         template void deserialize_from_bytes(const std::vector<char>& bytes, std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_us_k::state>>>&states);// { deserialize_from_bytes_impl(bytes, states); }
+        template void deserialize_from_bytes(const std::vector<char>& bytes, std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_hps_k::state>>>&states);// { deserialize_from_bytes_impl(bytes, states); }
     }
 }

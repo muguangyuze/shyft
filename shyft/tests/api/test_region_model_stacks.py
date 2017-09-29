@@ -9,6 +9,7 @@ from shyft.api import pt_ss_k
 from shyft.api import pt_hs_k
 from shyft.api import hbv_stack
 from shyft.api import pt_us_k
+from shyft.api import pt_hps_k
 
 class RegionModel(unittest.TestCase):
     @staticmethod
@@ -131,6 +132,15 @@ class RegionModel(unittest.TestCase):
         model = self.build_model(model_type, pt_us_k.PTUSKParameter, num_cells)
         self.assertEqual(model.size(), num_cells)
         self.verify_state_handler(model)
+
+
+    def test_pt_hps_k_model_init(self):
+        num_cells = 20
+        model_type = pt_hps_k.PTHPSKModel
+        model = self.build_model(model_type, pt_hps_k.PTHPSKParameter, num_cells)
+        self.assertEqual(model.size(), num_cells)
+        self.verify_state_handler(model)
+
 
     def test_extract_geo_cell_data_vector(self):
         num_cells = 20

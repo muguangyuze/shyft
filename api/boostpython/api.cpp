@@ -20,6 +20,7 @@ namespace expose {
     extern void kirchner();
     extern void precipitation_correction();
     extern void hbv_snow();
+    extern void hbv_physical_snow();
     extern void cell_environment();
     extern void interpolation();
     extern void skaugen_snow();
@@ -76,6 +77,7 @@ namespace expose {
         universal_snow();
         skaugen_snow();
         hbv_snow();
+        hbv_physical_snow();
         kirchner();
         cell_environment();
         interpolation();

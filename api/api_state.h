@@ -8,6 +8,7 @@
 #include "core/pt_hs_k.h"
 #include "core/pt_ss_k.h"
 #include "core/pt_us_k.h"
+#include "core/pt_hps_k.h"
 
 namespace shyft {
     namespace api {
@@ -72,6 +73,7 @@ namespace shyft {
           extern template std::vector<char> serialize_to_bytes(const std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_ss_k::state>>>& states);
           extern template std::vector<char> serialize_to_bytes(const std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_hs_k::state>>>& states);
           extern template std::vector<char> serialize_to_bytes(const std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_us_k::state>>>& states);
+          extern template std::vector<char> serialize_to_bytes(const std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_hps_k::state>>>& states);
 
         template <class CS> void deserialize_from_bytes(const std::vector<char>& bytes, std::shared_ptr<std::vector<CS>>&states);
           extern  template void deserialize_from_bytes(const std::vector<char>& bytes, std::shared_ptr<std::vector<cell_state_with_id<shyft::core::hbv_stack::state>>>&states);
@@ -79,6 +81,7 @@ namespace shyft {
           extern  template void deserialize_from_bytes(const std::vector<char>& bytes, std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_hs_k::state>>>&states);
           extern  template void deserialize_from_bytes(const std::vector<char>& bytes, std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_ss_k::state>>>&states);
           extern  template void deserialize_from_bytes(const std::vector<char>& bytes, std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_us_k::state>>>&states);
+          extern  template void deserialize_from_bytes(const std::vector<char>& bytes, std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_hps_k::state>>>&states);
         /** \brief state_io_handler for efficient handling of cell-identified states
         *
         * This class provides functionality to extract/apply state based on a
@@ -143,4 +146,5 @@ x_serialize_export_key(shyft::api::cell_state_with_id<shyft::core::pt_gs_k::stat
 x_serialize_export_key(shyft::api::cell_state_with_id<shyft::core::pt_ss_k::state>);
 x_serialize_export_key(shyft::api::cell_state_with_id<shyft::core::pt_hs_k::state>);
 x_serialize_export_key(shyft::api::cell_state_with_id<shyft::core::pt_us_k::state>);
+x_serialize_export_key(shyft::api::cell_state_with_id<shyft::core::pt_hps_k::state>);
 

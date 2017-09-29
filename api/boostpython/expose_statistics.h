@@ -317,6 +317,53 @@ namespace expose {
                 .def("glacier_melt_value", &rc_stat::glacier_melt_value, args("catchment_indexes", "i"), "returns  for cells matching catchments_ids at the i'th timestep[m3/s]")
                 ;
         }
+        
+
+        template <class cell>
+        static void hbv_physical_snow(const char *cell_name) {
+            char state_name[200];sprintf(state_name,"%sHBVPhysicalSnowStateStatistics",cell_name);
+            char response_name[200];sprintf(response_name,"%sHBVPhysicalSnowResponseStatistics",cell_name);
+            typedef typename shyft::api::hbv_physical_snow_cell_state_statistics<cell>    sc_stat;
+            typedef typename shyft::api::hbv_physical_snow_cell_response_statistics<cell> rc_stat;
+
+            rts_ (sc_stat::*swe_ts)(cids_) const = &sc_stat::swe;
+            vd_  (sc_stat::*swe_vd)(cids_,ix_) const =&sc_stat::swe;
+            rts_ (sc_stat::*sca_ts)(cids_) const = &sc_stat::sca;
+            vd_  (sc_stat::*sca_vd)(cids_,ix_) const =&sc_stat::sca;
+            rts_ (sc_stat::*surface_heat_ts)(cids_) const = &sc_stat::surface_heat;
+            vd_  (sc_stat::*surface_heat_vd)(cids_,ix_) const =&sc_stat::surface_heat;
+
+            class_<sc_stat>(state_name,"HBVPhysicalSnow state statistics",no_init)
+                .def(init<std::shared_ptr<std::vector<cell>> >(args("cells"),"construct HBVPhysicalSnow cell state statistics object"))
+                .def("swe",swe_ts,args("catchment_indexes"), "returns sum  for catcment_ids")
+                .def("swe",swe_vd,args("catchment_indexes","i"),"returns  for cells matching catchments_ids at the i'th timestep")
+				.def("swe_value", &sc_stat::swe_value, args("catchment_indexes", "i"), "returns  for cells matching catchments_ids at the i'th timestep")
+                .def("sca",sca_ts,args("catchment_indexes"), "returns sum  for catcment_ids")
+                .def("sca",sca_vd,args("catchment_indexes","i"),"returns  for cells matching catchments_ids at the i'th timestep")
+				.def("sca_value", &sc_stat::sca_value, args("catchment_indexes", "i"), "returns  for cells matching catchments_ids at the i'th timestep")
+                .def("surface_heat",surface_heat_ts,args("catchment_indexes"), "returns sum  for catcment_ids")
+                .def("surface_heat",surface_heat_vd,args("catchment_indexes","i"),"returns  for cells matching catchments_ids at the i'th timestep")
+				.def("surface_heat_value", &sc_stat::sca_value, args("catchment_indexes", "i"), "returns  for cells matching catchments_ids at the i'th timestep")
+
+            ;
+
+
+            rts_ (rc_stat::*outflow_ts)(cids_) const = &rc_stat::outflow;
+            vd_  (rc_stat::*outflow_vd)(cids_,ix_) const =&rc_stat::outflow;
+            rts_ (rc_stat::*glacier_melt_ts)(cids_) const = &rc_stat::glacier_melt;
+            vd_  (rc_stat::*glacier_melt_vd)(cids_, ix_) const = &rc_stat::glacier_melt;
+
+            class_<rc_stat>(response_name,"HBVSnow response statistics",no_init)
+                .def(init<std::shared_ptr<std::vector<cell>> >(args("cells"),"construct HBVSnow cell response statistics object"))
+                .def("outflow",outflow_ts,args("catchment_indexes"), "returns sum  for catcment_ids")
+                .def("outflow",outflow_vd,args("catchment_indexes","i"),"returns  for cells matching catchments_ids at the i'th timestep")
+				.def("outflow_value", &rc_stat::outflow_value, args("catchment_indexes", "i"), "returns  for cells matching catchments_ids at the i'th timestep")
+                .def("glacier_melt", glacier_melt_ts, args("catchment_indexes"), "returns sum  for catcment_ids[m3/s]")
+                .def("glacier_melt", glacier_melt_vd, args("catchment_indexes", "i"), "returns  for cells matching catchments_ids at the i'th timestep [m3/s]")
+                .def("glacier_melt_value", &rc_stat::glacier_melt_value, args("catchment_indexes", "i"), "returns  for cells matching catchments_ids at the i'th timestep[m3/s]")
+                ;
+        }
+
 
         template <class cell>
         static void skaugen(const char *cell_name) {

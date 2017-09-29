@@ -10,6 +10,7 @@
 #include "api/pt_gs_k.h"
 #include "api/pt_ss_k.h"
 #include "api/pt_hs_k.h"
+#include "api/pt_hps_k.h"
 #include "api/api_state.h"
 
 using namespace std;
@@ -112,6 +113,37 @@ TEST_CASE("test_pthsk_state_io") {
 	}
 
 }
+
+
+TEST_CASE("test_pthpsk_state_io") {
+	using namespace shyft::api;
+	pt_hps_k_state_t s;
+	s.hps.sca = 12.2;
+	s.hps.swe = 100;
+    s.hps.surface_heat = 3000;
+	s.kirchner.q = 12.2;
+	pt_hps_k_state_io sio;
+	string s1 = sio.to_string(s);
+	pt_hps_k_state_t sr;
+	TS_ASSERT(sio.from_string(s1, sr));
+	TS_ASSERT_EQUALS(s, sr);
+	vector<pt_hps_k_state_t> sv;
+	size_t n = 2 * 2;
+	sv.reserve(n);
+	for (size_t i = 0; i < n; ++i) {
+		sv.emplace_back(s);
+		s.hps.swe += 0.01;
+	}
+	string ssv = sio.to_string(sv);
+	vector<pt_hps_k_state_t> rsv;
+	rsv = sio.vector_from_string(ssv);
+	TS_ASSERT_EQUALS(rsv.size(), sv.size());
+	for (size_t i = 0; i < sv.size(); ++i) {
+		TS_ASSERT_EQUALS(rsv[i], sv[i]);
+	}
+
+}
+
 
 TEST_CASE("test_geo_cell_data_io") {
     geo_cell_data gcd(geo_point(1,2,3),4,5,0.6,land_type_fractions(2,4,6,8,10));
