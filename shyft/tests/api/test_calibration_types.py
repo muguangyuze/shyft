@@ -3,7 +3,7 @@ from shyft.api import pt_gs_k
 from shyft.api import pt_hs_k
 from shyft.api import pt_ss_k
 from shyft.api import hbv_stack
-from shyft.api import pt_us_k
+from shyft.api import pt_hps_k
 import unittest
 import numpy as np
 
@@ -146,54 +146,49 @@ class ShyftApi(unittest.TestCase):
         self.assertAlmostEqual(p.routing.beta, 0.8)
 
 
-    def test_pt_us_k_param(self):
-        ptgsk_size = 28
+    def test_pt_hps_k_param(self):
+        ptgsk_size = 23
         valid_names = [
             "kirchner.c1",
             "kirchner.c2",
             "kirchner.c3",
             "ae.ae_scale_factor",
-            "us.tx",
-            "us.wind_scale",
-            "us.max_water",
-            "us.wind_const",
-            "us.fast_albedo_decay_rate",
-            "us.slow_albedo_decay_rate",
-            "us.surface_magnitude",
-            "us.max_albedo",
-            "us.min_albedo",
-            "us.snowfall_reset_depth",
-            "us.snow_cv",
-            "us.glacier_albedo",
+            "hps.lw",
+            "hps.tx",
+            "hps.cfr",
+            "hps.wind_scale",
+            "hps.wind_const",
+            "hps.surface_magnitude",
+            "hps.max_albedo",
+            "hps.min_albedo",
+            "hps.fast_albedo_decay_rate",
+            "hps.slow_albedo_decay_rate",
+            "hps.snowfall_reset_depth",
+            "hps.calculate_iso_pot_energy",
+            "gm.dtf",
             "p_corr.scale_factor",
-            "us.snow_cv_forest_factor",
-            "us.snow_cv_altitude_factor",
             "pt.albedo",
             "pt.alpha",
-            "us.initial_bare_ground_fraction",
-            "us.winter_end_day_of_year",
-            "us.calculate_iso_pot_energy",
-            "gm.dtf",
             "routing.velocity",
             "routing.alpha",
             "routing.beta"
         ]
-        p = pt_us_k.PTUSKParameter()
+        p = pt_hps_k.PTHPSKParameter()
         self.verify_parameter_for_calibration(p, ptgsk_size, valid_names)
         # special verification of bool parameter
-        p.us.calculate_iso_pot_energy = True
-        self.assertTrue(p.us.calculate_iso_pot_energy)
-        self.assertAlmostEqual(p.get(23), 1.0, 0.00001)
-        p.us.calculate_iso_pot_energy = False
-        self.assertFalse(p.us.calculate_iso_pot_energy)
-        self.assertAlmostEqual(p.get(23), 0.0, 0.00001)
+        #p.us.calculate_iso_pot_energy = True
+        #self.assertTrue(p.us.calculate_iso_pot_energy)
+        #self.assertAlmostEqual(p.get(23), 1.0, 0.00001)
+        #p.us.calculate_iso_pot_energy = False
+        #self.assertFalse(p.us.calculate_iso_pot_energy)
+        #self.assertAlmostEqual(p.get(23), 0.0, 0.00001)
         pv = api.DoubleVector.from_numpy([p.get(i) for i in range(p.size())])
-        pv[23] = 1.0
+        #pv[23] = 1.0
+        #p.set(pv)
+        #self.assertTrue(p.us.calculate_iso_pot_energy)
+        #pv[23] = 0.0;
         p.set(pv)
-        self.assertTrue(p.us.calculate_iso_pot_energy)
-        pv[23] = 0.0;
-        p.set(pv)
-        self.assertFalse(p.us.calculate_iso_pot_energy)
+        #self.assertFalse(p.us.calculate_iso_pot_energy)
         # checkout new parameters for routing
         p.routing.velocity = 1 / 3600.0
         p.routing.alpha = 1.1

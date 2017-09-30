@@ -46,7 +46,7 @@ namespace shyft {
 			parameter& operator=(const parameter &c)=default;
 			parameter& operator=(parameter&&c)=default;
             ///< Calibration support, size is the total number of calibration parameters
-            size_t size() const { return 16; }
+            size_t size() const { return 23; }
 
             void set(const vector<double>& p) {
                 if (p.size() != size())
@@ -59,6 +59,15 @@ namespace shyft {
                 hps.lw = p[i++];
                 hps.tx = p[i++];
                 hps.cfr = p[i++];
+                hps.wind_scale = p[i++];
+                hps.wind_const = p[i++];
+                hps.surface_magnitude = p[i++];
+                hps.max_albedo = p[i++];
+                hps.min_albedo = p[i++];
+                hps.fast_albedo_decay_rate=p[i++];
+                hps.slow_albedo_decay_rate=p[i++];
+                hps.snowfall_reset_depth=p[i++];
+                hps.calculate_iso_pot_energy = std::fabs(p[i++])<0.0001 ?false:true;
                 gm.dtf = p[i++];
                 p_corr.scale_factor = p[i++];
 				pt.albedo = p[i++];
@@ -78,13 +87,22 @@ namespace shyft {
                     case  4:return hps.lw;
                     case  5:return hps.tx;
                     case  6:return hps.cfr;
-                    case  7:return gm.dtf;
-                    case  8:return p_corr.scale_factor;
-					case  9:return pt.albedo;
-					case 10:return pt.alpha;
-                    case 11:return routing.velocity;
-                    case 12:return routing.alpha;
-                    case 13:return routing.beta;
+                    case  7:return hps.wind_scale;
+                    case  8:return hps.wind_const;
+                    case  9:return hps.surface_magnitude;
+                    case 10:return hps.max_albedo;
+                    case 11:return hps.min_albedo;
+                    case 12:return hps.fast_albedo_decay_rate;
+                    case 13:return hps.slow_albedo_decay_rate;
+                    case 14:return hps.snowfall_reset_depth;
+                    case 15:return hps.calculate_iso_pot_energy?1.0:0.0;
+                    case 16:return gm.dtf;
+                    case 17:return p_corr.scale_factor;
+					case 18:return pt.albedo;
+					case 19:return pt.alpha;
+                    case 20:return routing.velocity;
+                    case 21:return routing.alpha;
+                    case 22:return routing.beta;
 
                 default:
                     throw runtime_error("pt_hp_k parameter accessor:.get(i) Out of range.");
@@ -102,16 +120,25 @@ namespace shyft {
                     "hps.lw",
                     "hps.tx",
                     "hps.cfr",
+                    "hps.wind_scale",
+                    "hps.wind_const",
+                    "hps.surface_magnitude",
+                    "hps.max_albedo",
+                    "hps.min_albedo",
+                    "hps.fast_albedo_decay_rate",
+                    "hps.slow_albedo_decay_rate",
+                    "hps.snowfall_reset_depth",
+                    "hps.calculate_iso_pot_energy",
                     "gm.dtf",
                     "p_corr.scale_factor",
-                    "pt.albedo",
-                    "pt.alpha",
+					"pt.albedo",
+					"pt.alpha",
                     "routing.velocity",
                     "routing.alpha",
-                    "routing.beta"
+                    "routing.beta",
 				};
                 if (i >= size())
-                    throw runtime_error("pt_hp_k parameter accessor:.get_name(i) Out of range.");
+                    throw runtime_error("pt_hps_k parameter accessor:.get_name(i) Out of range.");
                 return names[i];
             }
 

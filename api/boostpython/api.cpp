@@ -76,7 +76,6 @@ namespace expose {
         priestley_taylor();
         actual_evapotranspiration();
         gamma_snow();
-        universal_snow();
         skaugen_snow();
         hbv_snow();
         hbv_physical_snow();

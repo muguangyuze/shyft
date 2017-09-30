@@ -8,7 +8,6 @@ from shyft.api import pt_gs_k
 from shyft.api import pt_ss_k
 from shyft.api import pt_hs_k
 from shyft.api import hbv_stack
-from shyft.api import pt_us_k
 from shyft.api import pt_hps_k
 
 class RegionModel(unittest.TestCase):
@@ -123,13 +122,6 @@ class RegionModel(unittest.TestCase):
         num_cells = 20
         model_type = hbv_stack.HbvModel
         model = self.build_model(model_type, hbv_stack.HbvParameter, num_cells)
-        self.assertEqual(model.size(), num_cells)
-        self.verify_state_handler(model)
-
-    def test_pt_us_k_model_init(self):
-        num_cells = 20
-        model_type = pt_us_k.PTUSKModel
-        model = self.build_model(model_type, pt_us_k.PTUSKParameter, num_cells)
         self.assertEqual(model.size(), num_cells)
         self.verify_state_handler(model)
 
