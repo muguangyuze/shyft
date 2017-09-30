@@ -85,7 +85,9 @@
 		<Unit filename="dream_optimizer.h">
 			<Option virtualFolder="optimizers/" />
 		</Unit>
-		<Unit filename="dtss.h" />
+		<Unit filename="dtss.h">
+			<Option virtualFolder="time_series/" />
+		</Unit>
 		<Unit filename="experimental.cpp">
 			<Option virtualFolder="experimental/" />
 		</Unit>
@@ -105,6 +107,9 @@
 			<Option virtualFolder="methods/" />
 		</Unit>
 		<Unit filename="hbv_actual_evapotranspiration.h">
+			<Option virtualFolder="methods/" />
+		</Unit>
+		<Unit filename="hbv_physical_snow.h">
 			<Option virtualFolder="methods/" />
 		</Unit>
 		<Unit filename="hbv_snow.h">
@@ -150,6 +155,12 @@
 		<Unit filename="pt_gs_k_cell_model.h">
 			<Option virtualFolder="method_stacks/" />
 		</Unit>
+		<Unit filename="pt_hps_k.h">
+			<Option virtualFolder="method_stacks/" />
+		</Unit>
+		<Unit filename="pt_hps_k_cell_model.h">
+			<Option virtualFolder="method_stacks/" />
+		</Unit>
 		<Unit filename="pt_hs_k.h">
 			<Option virtualFolder="method_stacks/" />
 		</Unit>
@@ -160,12 +171,6 @@
 			<Option virtualFolder="method_stacks/" />
 		</Unit>
 		<Unit filename="pt_ss_k_cell_model.h">
-			<Option virtualFolder="method_stacks/" />
-		</Unit>
-		<Unit filename="pt_us_k.h">
-			<Option virtualFolder="method_stacks/" />
-		</Unit>
-		<Unit filename="pt_us_k_cell_model.h">
 			<Option virtualFolder="method_stacks/" />
 		</Unit>
 		<Unit filename="region_model.h" />
@@ -185,6 +190,9 @@
 		<Unit filename="time_series.h">
 			<Option virtualFolder="time_series/" />
 		</Unit>
+		<Unit filename="time_series_info.h">
+			<Option virtualFolder="time_series/" />
+		</Unit>
 		<Unit filename="time_series_merge.h">
 			<Option virtualFolder="time_series/" />
 		</Unit>
@@ -196,9 +204,6 @@
 		</Unit>
 		<Unit filename="unit_conversion.h">
 			<Option virtualFolder="compiler_etc/" />
-		</Unit>
-		<Unit filename="universal_snow.h">
-			<Option virtualFolder="methods/" />
 		</Unit>
 		<Unit filename="utctime_utilities.cpp">
 			<Option virtualFolder="time_and_calendar/" />

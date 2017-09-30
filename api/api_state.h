@@ -1,5 +1,12 @@
 #pragma once
+#ifdef SHYFT_NO_PCH
+#include <string>
+#include <vector>
+#include <memory>
+#include <stdexcept>
 #include "core/core_pch.h"
+#endif // SHYFT_NO_PCH
+
 #include "core/geo_cell_data.h"
 #include "core/cell_model.h"
 //-include stacks here, we need to make cell_state_with_id serializable
@@ -7,7 +14,6 @@
 #include "core/pt_gs_k.h"
 #include "core/pt_hs_k.h"
 #include "core/pt_ss_k.h"
-#include "core/pt_us_k.h"
 #include "core/pt_hps_k.h"
 
 namespace shyft {
@@ -63,7 +69,7 @@ namespace shyft {
             }
             /** do the magic given a cell, create the id, stash away the id:state*/
             template<class C>
-            cell_state_with_id(const C& c) :id(cell_state_id_of(c.geo)), state(c.state) {}
+            explicit cell_state_with_id(const C& c) :id(cell_state_id_of(c.geo)), state(c.state) {}
             x_serialize_decl();
         };
 
@@ -72,7 +78,6 @@ namespace shyft {
           extern template std::vector<char> serialize_to_bytes(const std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_gs_k::state>>>& states);
           extern template std::vector<char> serialize_to_bytes(const std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_ss_k::state>>>& states);
           extern template std::vector<char> serialize_to_bytes(const std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_hs_k::state>>>& states);
-          extern template std::vector<char> serialize_to_bytes(const std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_us_k::state>>>& states);
           extern template std::vector<char> serialize_to_bytes(const std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_hps_k::state>>>& states);
 
         template <class CS> void deserialize_from_bytes(const std::vector<char>& bytes, std::shared_ptr<std::vector<CS>>&states);
@@ -80,7 +85,6 @@ namespace shyft {
           extern  template void deserialize_from_bytes(const std::vector<char>& bytes, std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_gs_k::state>>>&states);
           extern  template void deserialize_from_bytes(const std::vector<char>& bytes, std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_hs_k::state>>>&states);
           extern  template void deserialize_from_bytes(const std::vector<char>& bytes, std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_ss_k::state>>>&states);
-          extern  template void deserialize_from_bytes(const std::vector<char>& bytes, std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_us_k::state>>>&states);
           extern  template void deserialize_from_bytes(const std::vector<char>& bytes, std::shared_ptr<std::vector<cell_state_with_id<shyft::core::pt_hps_k::state>>>&states);
         /** \brief state_io_handler for efficient handling of cell-identified states
         *
@@ -97,7 +101,7 @@ namespace shyft {
 
             state_io_handler() {}
             /** construct a handler for the cells provided*/
-            state_io_handler(std::shared_ptr<std::vector<C>> cellx) :cells(cellx) {}
+            explicit state_io_handler(const std::shared_ptr<std::vector<C>>& cellx) :cells(cellx) {}
 
             /** Extract cell identified state
             *\return the state for the cells, optionally filtered by the supplied catchment ids (cids)
@@ -116,7 +120,7 @@ namespace shyft {
             /** Restore cell identified state, filtered by cids.
             * \return a list identifying states that where not applied to cells(filtering out all that is related to non-matching cids)
             */
-            std::vector<int> apply_state(std::shared_ptr < std::vector<cell_state_id_t> > s, const std::vector<int>& cids) {
+            std::vector<int> apply_state(const std::shared_ptr < std::vector<cell_state_id_t> >& s, const std::vector<int>& cids) {
                 if (!cells)
                     throw std::runtime_error("No cells to apply state into");
                 std::map<cell_state_id, C*> cmap;// yes store pointers, we know the scope is this routine
@@ -145,6 +149,5 @@ x_serialize_export_key(shyft::api::cell_state_with_id<shyft::core::hbv_stack::st
 x_serialize_export_key(shyft::api::cell_state_with_id<shyft::core::pt_gs_k::state>);
 x_serialize_export_key(shyft::api::cell_state_with_id<shyft::core::pt_ss_k::state>);
 x_serialize_export_key(shyft::api::cell_state_with_id<shyft::core::pt_hs_k::state>);
-x_serialize_export_key(shyft::api::cell_state_with_id<shyft::core::pt_us_k::state>);
 x_serialize_export_key(shyft::api::cell_state_with_id<shyft::core::pt_hps_k::state>);
 

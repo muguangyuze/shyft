@@ -1,4 +1,22 @@
 #pragma once
+
+#ifdef SHYFT_NO_PCH
+#include <string>
+#include <vector>
+#include <map>
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <future>
+#include <utility>
+#include <memory>
+#include <stdexcept>
+#include <future>
+#include <mutex>
+#include <boost/math/distributions/gamma.hpp>
+// no serialize here: #include "core_pch.h"
+#endif // SHYFT_NO_PCH
+
 #include "geo_cell_data.h"
 #include "time_axis.h"
 #include "time_series.h"
@@ -271,11 +289,11 @@ namespace shyft {
                 std::shared_ptr<std::vector<C>> cells; ///< shared with the region_model !
                 time_axis::fixed_dt ta;///< shared with the region_model,  should be the simulation time-axis
 
-                model(std::shared_ptr<river_network> rivers,
-                      std::shared_ptr<std::vector<C>> cells,
+                model(const std::shared_ptr<river_network> &rivers,
+                      const std::shared_ptr<std::vector<C>>& cells,
                       const time_axis::fixed_dt& ta):rivers(rivers),cells(cells),ta(ta) {}
                 model(const river_network& rivers,// hmm. clumsy, the region model keeps no shared pointer, which is ok..
-                      std::shared_ptr<std::vector<C>> cells,
+                      const std::shared_ptr<std::vector<C>>& cells,
                       const time_axis::fixed_dt& ta):rivers(std::make_shared<river_network>(rivers)),cells(cells),ta(ta) {}
                 // constructors etc.
                 model() = default;

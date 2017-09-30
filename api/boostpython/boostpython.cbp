@@ -131,8 +131,8 @@
 					<Add directory="../../bin/Release" />
 				</Linker>
 			</Target>
-			<Target title="pt_us_k_Debug">
-				<Option output="../../shyft/api/pt_us_k/_pt_us_k" prefix_auto="0" extension_auto="1" />
+			<Target title="pt_hps_k_Debug">
+				<Option output="../../shyft/api/pt_hps_k/_pt_hps_k" prefix_auto="0" extension_auto="1" />
 				<Option object_output="obj/Debug/" />
 				<Option type="3" />
 				<Option compiler="gcc" />
@@ -143,8 +143,8 @@
 					<Add directory="../../bin/Debug" />
 				</Linker>
 			</Target>
-			<Target title="pt_us_k_Release">
-				<Option output="../../shyft/api/pt_us_k/_pt_us_k" prefix_auto="0" extension_auto="1" />
+			<Target title="pt_hps_k_Release">
+				<Option output="../../shyft/api/pt_hps_k/_pt_hps_k" prefix_auto="0" extension_auto="1" />
 				<Option object_output="obj/Release/" />
 				<Option type="3" />
 				<Option compiler="gcc" />
@@ -158,8 +158,8 @@
 			</Target>
 		</Build>
 		<VirtualTargets>
-			<Add alias="Debug" targets="api_Debug;pt_gs_k_Debug;pt_hs_k_Debug;pt_ss_k_Debug;hbv_stack_Debug;pt_us_k_Debug;" />
-			<Add alias="Release" targets="api_Release;pt_gs_k_Release;pt_hs_k_Release;pt_ss_k_Release;hbv_stack_Release;pt_us_k_Release;" />
+			<Add alias="Debug" targets="api_Debug;pt_gs_k_Debug;pt_hs_k_Debug;pt_ss_k_Debug;hbv_stack_Debug;pt_hps_k_Debug;" />
+			<Add alias="Release" targets="api_Release;pt_gs_k_Release;pt_hs_k_Release;pt_ss_k_Release;hbv_stack_Release;pt_hps_k_Release;" />
 		</VirtualTargets>
 		<Compiler>
 			<Add option="-Wall" />
@@ -184,9 +184,11 @@
 			<Add library="python3" />
 			<Add library="boost_serialization" />
 			<Add library="dlib" />
-			<Add directory="$(#python.lib)" />
+			<Add library="boost_filesystem" />
+			<Add library="boost_system" />
 			<Add directory="$(#dlib.lib)" />
 			<Add directory="$(#boost.lib)" />
+			<Add directory="$(#python.lib)" />
 		</Linker>
 		<Unit filename="api.cpp">
 			<Option virtualFolder="api/" />
@@ -229,6 +231,11 @@
 			<Option target="api_Release" />
 		</Unit>
 		<Unit filename="api_hbv_actual_evapotranspiration.cpp">
+			<Option virtualFolder="api/" />
+			<Option target="api_Debug" />
+			<Option target="api_Release" />
+		</Unit>
+		<Unit filename="api_hbv_physical_snow.cpp">
 			<Option virtualFolder="api/" />
 			<Option target="api_Debug" />
 			<Option target="api_Release" />
@@ -308,11 +315,6 @@
 			<Option target="api_Debug" />
 			<Option target="api_Release" />
 		</Unit>
-		<Unit filename="api_universal_snow.cpp">
-			<Option virtualFolder="api/" />
-			<Option target="api_Debug" />
-			<Option target="api_Release" />
-		</Unit>
 		<Unit filename="api_utctime.cpp">
 			<Option virtualFolder="api/" />
 			<Option target="api_Debug" />
@@ -323,7 +325,10 @@
 			<Option target="api_Debug" />
 			<Option target="api_Release" />
 		</Unit>
-		<Unit filename="boostpython_pch.cpp" />
+		<Unit filename="boostpython_pch.cpp">
+			<Option compile="0" />
+			<Option link="0" />
+		</Unit>
 		<Unit filename="boostpython_pch.h">
 			<Option compile="1" />
 			<Option weight="0" />
@@ -340,6 +345,10 @@
 			<Option target="pt_gs_k_Debug" />
 			<Option target="pt_gs_k_Release" />
 		</Unit>
+		<Unit filename="pt_hps_k.cpp">
+			<Option target="pt_hps_k_Debug" />
+			<Option target="pt_hps_k_Release" />
+		</Unit>
 		<Unit filename="pt_hs_k.cpp">
 			<Option target="pt_hs_k_Debug" />
 			<Option target="pt_hs_k_Release" />
@@ -347,10 +356,6 @@
 		<Unit filename="pt_ss_k.cpp">
 			<Option target="pt_ss_k_Debug" />
 			<Option target="pt_ss_k_Release" />
-		</Unit>
-		<Unit filename="pt_us_k.cpp">
-			<Option target="pt_us_k_Debug" />
-			<Option target="pt_us_k_Release" />
 		</Unit>
 		<Unit filename="py_convertible.h" />
 		<Extensions>

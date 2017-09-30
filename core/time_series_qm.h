@@ -1,3 +1,14 @@
+#pragma once
+#ifdef SHYFT_NO_PCH
+#include <string>
+#include <vector>
+#include <algorithm>
+#include <future>
+#endif // SHYFT_NO_PCH
+
+#include "utctime_utilities.h"
+#include "time_series.h"
+
 namespace shyft {
     namespace qm {
         using namespace std;
@@ -85,6 +96,76 @@ namespace shyft {
             return q;
         }
 
+
+        /** \brief compute interpolated quantile-values based on weigh_value ordered (wvo) items
+        *
+        *
+        * \note The requirement to the wvo_accessor
+        *  (1) sum weights == 1.0
+        *  (2) weight(i), value(i) are already ordered by value asc
+        *   are the callers responsibility
+        *   no checks/asserts are done
+        *
+        *  CONSIDER: we might want to rework the output of this algorithm
+        *        so that it streams/put data directly into the
+        *        target-time-series (instead of building a vector
+        *        and then spread that across time-series)
+        *
+        *  The difference between this function and compute_weighted_quantiles
+        *  is that this function assigns a value to each desired quantile that
+        *  is the interpolated value between the two closest input quantiles,
+        *  while compute_weighted_quantiles assigns a value to each desired
+        *  quantile that is just the value of the input quantile that is less
+        *  than or equal to the desired quantile. (This function treats the edge
+        *  cases similarly - i.e. whenever the desired quantile is lower than
+        *  half of the first input quantile or greater than the last half of
+        *  the last input quantile, the value assigned is the first and last
+        *  input quantile values, respectively, and no interpolation is
+        *  performed).
+        *
+        * \tparam WVO Weight Value Ordered accessor, see also wvo_accessor
+        *  .size() -> number of weight,value items
+        *  .value(i)-> double the i'th value
+        *  .weight(i)-> double the i'th weight
+        * \param n_q number of quantiles,>1, evenly distributed over 0..1.0
+        * \param items the weighted items, weight,value, ordered asc value by i'th index,
+        *        assuming that sum weights = 1.0
+        * \return vector<double> of size n_q, where the i'th value is the i'th computed quantile
+        */
+        template <class WVO>
+        vector<double> compute_interp_weighted_quantiles(size_t n_q, WVO const& wv) {
+            const double q_step = 1.0 / (n_q - 1); // iteration is 0-based..
+            vector<double> q; q.reserve(n_q);
+            size_t j = -1;
+            double q_j = 0.0;
+            double w_j = 0;
+            double width = 0;
+            for (size_t i = 0; i< n_q; ++i) {
+                double q_i = q_step * i;
+                while (q_j <= q_i && j + 1 != wv.size()) {
+                    width = 0.5 * w_j;
+                    w_j = wv.weight(++j);
+                    width += 0.5 * w_j;
+                    q_j += width;
+                }
+                // Calculate interpolation
+                double v_j;
+
+                if (j == 0 || (j + 1 == wv.size() && q_i >= q_j)) {
+                    // Flat values beyond interpolation range
+                    v_j = wv.value(j);
+                } else {
+                    double interp_start = wv.value(j-1);
+                    double interp_end = wv.value(j);
+                    double inclination = (interp_end - interp_start) / width;
+                    double offset = q_j - width;
+                    v_j = interp_start + inclination * (q_i - offset);
+                }
+                q.emplace_back(v_j);
+            }
+            return q;
+        }
+
         /**\brief a Weight Value Ordered collection for ts-vector type
         *
         * This type is a stack-context only, light weight wrapper,
@@ -158,19 +239,28 @@ namespace shyft {
         *      value already in pri_tsv and the corresponding quantile-mapped
         *      value in fc_tsv. If this parameter is set to
         *      core::no_utctime, interpolation will not take place.
+        * \param interpolation_end As interpolation_start, but denotes the end
+        *      of the interpolation period.
+        * \param interpolated_quantiles Whether to interpolate between forecast
+        *      quantile values or use the quantile values that are less than or
+        *      equal to the current quantile (default) when mapping the forecast
+        *      observations to the priors. Note that this interpolation is
+        *      something else than what is referred to wrt the
+        *      interpolation_start and interpolation_end.
         * \return tsv_t Containing the quantile mapped values at the times
         *      indicated by time_axis, and interpolated after
         *      interpolation_start.
         **/
         template <class tsa_t, class tsv_t, class ta_t>
         tsv_t quantile_mapping(tsv_t const &pri_tsv, tsv_t const &fc_tsv,
-            vector<vector<int>> const &pri_idx_v,
-            vector<vector<int>> const &fc_idx_v,
-            vector<double> const &fc_weights,
-            ta_t const &time_axis,
-            core::utctime const &interpolation_start,
-            core::utctime const interpolation_end = core::no_utctime
-        ) {
+                vector<vector<int>> const &pri_idx_v,
+                vector<vector<int>> const &fc_idx_v,
+                vector<double> const &fc_weights,
+                ta_t const &time_axis,
+                core::utctime const &interpolation_start,
+                core::utctime const interpolation_end = core::no_utctime,
+                bool interpolated_quantiles = false) {
+
             vector<tsa_t> pri_accessor_vec;
             pri_accessor_vec.reserve(pri_tsv.size());
             for (const auto& ts : pri_tsv)
@@ -213,7 +303,12 @@ namespace shyft {
                 wvo_fc.t_ix = t;
                 size_t num_pri_cases = pri_idx_v[t].size();
                 if (wvo_fc.size() > 0 && (!core::is_valid(interpolation_period.end) || time_axis.time(t)<interpolation_period.end)) {
-                    vector<double> quantile_vals = compute_weighted_quantiles(num_pri_cases, wvo_fc);
+                    vector<double> quantile_vals;
+                    if (interpolated_quantiles) {
+                        quantile_vals = compute_interp_weighted_quantiles(num_pri_cases, wvo_fc);
+                    } else {
+                        quantile_vals = compute_weighted_quantiles(num_pri_cases, wvo_fc);
+                    }
                     if ( (interpolation_period.contains(time_axis.time(t)) ||
                             interpolation_period.end == time_axis.time(t))) {
                         core::utctime start = interpolation_period.start;
@@ -247,13 +342,21 @@ namespace shyft {
         * \param time_axis the time-axis that we would like the resulting time-series to be mapped into
         * \param interpolation_start the time within the forecast period where the interpolation period should start
         * \param interpolation_end   the time within the forecast period where the interpolation period should end, default last fc
+        * \param interpolated_quantiles Whether to interpolate between forecast
+        *      quantile values or use the quantile values that are less than or
+        *      equal to the current quantile (default) when mapping the forecast
+        *      observations to the priors. Note that this interpolation is
+        *      something else than what is referred to wrt the
+        *      interpolation_start and interpolation_end.
+
         * \return a time-series vector with the resulting quantile-mapped time-series
         */
         template <class tsa_t, class tsv_t, class ta_t>
         tsv_t quantile_map_forecast(vector<tsv_t> const &forecast_sets,
             vector<double> const &set_weights, tsv_t const &historical_data,
             ta_t const &time_axis,
-            core::utctime interpolation_start,core::utctime interpolation_end=core::no_utctime) {
+            core::utctime interpolation_start,core::utctime interpolation_end=core::no_utctime,
+            bool interpolated_quantiles=false) {
             tsv_t forecasts_unpacked;
             vector<double> weights_unpacked;
             for (size_t i = 0; i<forecast_sets.size(); ++i) {
@@ -270,7 +373,8 @@ namespace shyft {
 
             return quantile_mapping<tsa_t>(historical_data, forecasts_unpacked,
                 historical_indices_handle.get(), forecast_indices, weights_unpacked,
-                time_axis, interpolation_start,interpolation_end);
+                time_axis, interpolation_start,interpolation_end,
+                interpolated_quantiles);
         }
     }
 }

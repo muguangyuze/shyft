@@ -11,13 +11,19 @@ namespace expose {
     using namespace shyft::core;
     using namespace boost::python;
     using namespace std;
-    
+
+    namespace py = boost::python;
+
     shyft::api::ats_vector quantile_map_forecast_5(vector<shyft::api::ats_vector> const & forecast_set, vector<double> const& set_weights, shyft::api::ats_vector const& historical_data, shyft::api::gta_t const&time_axis, utctime interpolation_start ) {
         return shyft::api::quantile_map_forecast(forecast_set, set_weights, historical_data, time_axis, interpolation_start);
     }
     shyft::api::ats_vector quantile_map_forecast_6(vector<shyft::api::ats_vector> const & forecast_set, vector<double> const& set_weights, shyft::api::ats_vector const& historical_data, shyft::api::gta_t const&time_axis, utctime interpolation_start, utctime interpolation_end) {
         return shyft::api::quantile_map_forecast(forecast_set, set_weights, historical_data, time_axis, interpolation_start, interpolation_end);
     }
+    shyft::api::ats_vector quantile_map_forecast_7(vector<shyft::api::ats_vector> const & forecast_set, vector<double> const& set_weights, shyft::api::ats_vector const& historical_data, shyft::api::gta_t const&time_axis, utctime interpolation_start, utctime interpolation_end, bool interpolated_quantiles) {
+        return shyft::api::quantile_map_forecast(forecast_set, set_weights, historical_data, time_axis, interpolation_start, interpolation_end, interpolated_quantiles);
+    }
+
 
     static void expose_ats_vector() {
         using namespace shyft::api;
@@ -72,6 +78,11 @@ namespace expose {
                  doc_parameter("indexes","IntVector","the indicies to pick out from self, if indexes is empty, then all is returned")
                  doc_returns("slice","TsVector","a new TsVector, with content according to indexes specified")
             )
+            .def("abs", &ats_vector::abs,
+                doc_intro("create a new ts-vector, with all members equal to abs(self")
+                doc_returns("tsv", "TsVector", "a new TsVector expression, that will provide the abs-values of self.values")
+            )
+
             .def("average", &ats_vector::average, args("ta"),
                 doc_intro("create a new vector of ts that is the true average of self")
                 doc_intro("over the specified time-axis ta.")
@@ -107,6 +118,26 @@ namespace expose {
                 doc_parameter("delta_t","int","number of seconds to time-shift, positive values moves forward")
 				doc_returns("tsv","TsVector",	"a new time-series, that appears as time-shifted version of self")
 			)
+            .def("extend", &ats_vector::extend_ts, (py::arg("ts"), py::arg("split_policy") = extend_ts_split_policy::EPS_LHS_LAST, py::arg("fill_policy") = extend_ts_fill_policy::EPF_NAN, py::arg("split_at") = utctime(0), py::arg("fill_value") = shyft::nan),
+                doc_intro("create a new ats_vector where all time-series are extended by ts")
+                doc_parameters()
+                doc_parameter("ts", "TimeSeries", "time-series to extend each time-series in self with")
+                doc_parameter("split_policy", "extend_ts_split_policy", "policy determining where to split between self and ts")
+                doc_parameter("fill_policy", "extend_ts_fill_policy", "policy determining how to fill any gap between self and ts")
+                doc_parameter("split_at", "utctime", "time at which to split if split_policy == EPS_VALUE")
+                doc_parameter("fill_value", "float", "value to fill any gap with if fill_policy == EPF_FILL")
+                doc_returns("new_ts_vec" ,"TsVector", "a new time-series vector where all time-series in self have been extended by ts")
+            )
+            .def("extend", &ats_vector::extend_vec, (py::arg("ts"), py::arg("split_policy") = extend_ts_split_policy::EPS_LHS_LAST, py::arg("fill_policy") = extend_ts_fill_policy::EPF_NAN, py::arg("split_at") = utctime(0), py::arg("fill_value") = shyft::nan),
+                doc_intro("create a new ats_vector where all ts' are extended by the matching ts from ts_vec")
+                doc_parameters()
+                doc_parameter("ts_vec", "TsVector", "time-series vector to extend time-series in self with")
+                doc_parameter("split_policy", "extend_ts_split_policy", "policy determining where to split between self and ts")
+                doc_parameter("fill_policy", "extend_ts_fill_policy", "policy determining how to fill any gap between self and ts")
+                doc_parameter("split_at", "utctime", "time at which to split if split_policy == EPS_VALUE")
+                doc_parameter("fill_value", "float", "value to fill any gap with if fill_policy == EPF_FILL")
+                doc_returns("new_ts_vec" ,"TsVector", "a new time-series vector where all time-series in self have been extended by the corresponding time-series in ts_vec")
+            )
             .def("min",(m_double)&ats_vector::min,args("number"),"returns min of vector and a number")
             .def("min", (m_ts)&ats_vector::min, args("ts"), "returns min of ts-vector and a ts")
             .def("min", (m_tsv)&ats_vector::min, args("tsv"), "returns min of ts-vector and another ts-vector")
@@ -218,15 +249,20 @@ namespace expose {
                 doc_parameter("time_axis", "TimeAxis", "the time-axis that the resulting time-series are mapped into")
                 doc_parameter("interpolation_start", "int", "time where the historical to forecast interpolation should start, 1970 utc seconds since epoch")
                 doc_parameter("interpolation_end", "int", "time where the interpolation should end, if no_utctime, use end of forecast-set")
+                doc_parameter("interpolated_quantiles", "bool", "whether the quantile values should be interpolated or assigned the values lower than or equal to the current quantile")
                 doc_returns("qm_forecast", "TsVector", "quantile mapped forecast with the requested time-axis")
                 ;
 
-            def("quantile_map_forecast",quantile_map_forecast_5, 
+            def("quantile_map_forecast",quantile_map_forecast_5,
                 args("forecast_sets","set_weights","historical_data","time_axis","interpolation_start"),
                 qm_doc
                 );
             def("quantile_map_forecast", quantile_map_forecast_6,
                 args("forecast_sets", "set_weights", "historical_data", "time_axis", "interpolation_start", "interpolation_end"),
+                qm_doc
+            );
+            def("quantile_map_forecast", quantile_map_forecast_7,
+                args("forecast_sets", "set_weights", "historical_data", "time_axis", "interpolation_start", "interpolation_end", "interpolated_quantiles"),
                 qm_doc
             );
 
@@ -272,6 +308,8 @@ namespace expose {
 
 
     static void expose_apoint_ts() {
+        using namespace shyft::api;
+
         typedef shyft::api::apoint_ts pts_t;
         typedef pts_t (pts_t::*self_dbl_t)(double) const;
         typedef pts_t (pts_t::*self_ts_t)(const pts_t &)const;
@@ -349,13 +387,29 @@ namespace expose {
 
 			.def(init<const vector<double>&, utctimespan, const time_axis::generic_dt&>(args("pattern", "dt", "ta"), "construct a timeseries given a equally spaced dt pattern and a timeaxis ta"))
 			.def(init<const vector<double>&, utctimespan,utctime, const time_axis::generic_dt&>(args("pattern", "dt","t0", "ta"), "construct a timeseries given a equally spaced dt pattern, starting at t0, and a timeaxis ta"))
-            .def(init<std::string>(args("id"),
-                "constructs a bind-able ts,\n"
-                "providing a symbolic possibly unique id that at a later time\n"
-                "can be bound, using the .bind(ts) method to concrete values\n"
-                "if the ts is used as ts, like size(),.value(),time() before it\n"
-                "is bound, then a runtime-exception is raised\n"
+            .def(init<std::string>(args("ts_id"),
+                doc_intro("constructs a bind-able ts,")
+                doc_intro("providing a symbolic possibly unique id that at a later time")
+                doc_intro("can be bound, using the .bind(ts) method to concrete values")
+                doc_intro("if the ts is used as ts, like size(),.value(),time() before it")
+                doc_intro("is bound, then a runtime-exception is raised")
+                doc_parameters()
+                doc_parameter("ts_id","str","url-like identifier for the time-series,notice that shyft://<container>/<path> is for shyft-internal store")
                 )
+            )
+            .def(init<std::string,const apoint_ts&>(args("ts_id","bts"),
+                doc_intro("constructs a ready bound ts,")
+                doc_intro("providing a symbolic possibly unique id that at a later time")
+                doc_intro("can be used to correlate with back-end store\n")
+                doc_parameters()
+                doc_parameter("ts_id","str","url-type of id, notice that shyft://<container>/<path> is for shyft-internal store")
+                doc_parameter("bts","TimeSeries","A concrete time-series, with point_fx policy, time_axis and values")
+                )
+            )
+            .def("ts_id",&apoint_ts::id,
+                doc_intro("returns ts_id of symbolic ts, or empty string if not symbolic ts")
+                doc_returns("ts_id","str","url-like ts_id as passed to constructor or empty if the ts is not a ts with ts_id")
+                doc_see_also("TimeSeries('url://like/id'),TimeSeries('url://like/id',ts_with_values)")
             )
 			DEF_STD_TS_STUFF()
 			// expose time_axis sih: would like to use property, but no return value policy, so we use get_ + fixup in init.py
@@ -380,7 +434,10 @@ namespace expose {
 
 			.def(-self)
             .def(operator!(self))
-
+            .def("abs", &shyft::api::apoint_ts::abs,
+                doc_intro("create a new ts, abs(self")
+                doc_returns("ts", "TimeSeries", "a new time-series expression, that will provide the abs-values of self.values")
+            )
 			.def("average", &shyft::api::apoint_ts::average, args("ta"),
                 doc_intro("create a new ts that is the true average of self")
                 doc_intro("over the specified time-axis ta.")
@@ -425,6 +482,55 @@ namespace expose {
                 "\t Specifies how to handle initial weight.size()-1 values\n")
                 doc_returns("ts","TimeSeries","a new time-series that is evaluated on request to the convolution of self")
                 doc_see_also("ConvolvePolicy")
+            )
+			.def("rating_curve", &shyft::api::apoint_ts::rating_curve, py::arg("rc_param"),
+				doc_intro("Create a new TimeSeries that is computed using a RatingCurveParameter instance.")
+				doc_intro("")
+				doc_intro("Example:")
+				doc_intro("")
+				doc_intro(">>> import numpy as np")
+				doc_intro(">>> from shyft.api import (")
+				doc_intro("...     utctime_now, deltaminutes,")
+				doc_intro("...     TimeAxis, TimeSeries,")
+				doc_intro("...     RatingCurveFunction, RatingCurveParameters")
+				doc_intro("... )")
+				doc_intro(">>>")
+				doc_intro(">>> # parameters")
+				doc_intro(">>> t0 = utctime_now()")
+				doc_intro(">>> dt = deltaminutes(30)")
+				doc_intro(">>> n = 48*2")
+				doc_intro(">>>")
+				doc_intro(">>> # make rating function, each with two segments")
+				doc_intro(">>> rcf_1 = RatingCurveFunction()")
+				doc_intro(">>> rcf_1.add_segment(0, 2, 0, 1)    # add segment from level 0, computing f(h) = 2*(h - 0)**1")
+				doc_intro(">>> rcf_1.add_segment(5.3, 1, 1, 1.4)  # add segment from level 5.3, computing f(h) = 1.3*(h - 1)**1.4")
+				doc_intro(">>> rcf_2 = RatingCurveFunction()")
+				doc_intro(">>> rcf_2.add_segment(0, 1, 1, 1)    # add segment from level 0, computing f(h) = 1*(h - 1)**1")
+				doc_intro(">>> rcf_2.add_segment(8.0, 0.5, 0, 2)  # add segment from level 8.0, computing f(h) = 0.5*(h - 0)**2")
+				doc_intro(">>>")
+				doc_intro(">>> # add rating curves to a parameter pack")
+				doc_intro(">>> rcp = RatingCurveParameters()")
+				doc_intro(">>> rcp.add_curve(t0, rcf_1)  # rcf_1 is active from t0")
+				doc_intro(">>> rcp.add_curve(t0+dt*n//2, rcf_2)  # rcf_2 takes over from t0 + dt*n/2")
+				doc_intro(">>>")
+				doc_intro(">>> # create a time-axis/-series")
+				doc_intro(">>> ta = TimeAxis(t0, dt, n)")
+				doc_intro(">>> ts = TimeSeries(ta, np.linspace(0, 12, n))")
+				doc_intro(">>> rc_ts = ts.rating_curve(rcp)  # create a new time series computed using the rating curve functions")
+				doc_intro(">>>")
+				doc_parameters()
+				doc_parameter("rc_param", "RatingCurveParameter", "RatingCurveParameter instance.")
+				doc_returns("rcts", "TimeSeries", "A new TimeSeries computed using self and rc_param.")
+			)
+            .def("extend", &shyft::api::apoint_ts::extend, (py::arg("ts"), py::arg("split_policy") = extend_ts_split_policy::EPS_LHS_LAST, py::arg("fill_policy") = extend_ts_fill_policy::EPF_NAN, py::arg("split_at") = utctime(0), py::arg("fill_value") = shyft::nan),
+                doc_intro("create a new time-series that is self extended with ts")
+                doc_parameters()
+                doc_parameter("ts", "TimeSeries", "time-series to extend self with, only values after both the start of self, and split_at is used")
+                doc_parameter("split_policy", "extend_split_policy", "policy determining where to split between self and ts")
+                doc_parameter("fill_policy", "extend_fill_policy", "policy determining how to fill any gap between self and ts")
+                doc_parameter("split_at", "utctime", "time at which to split if split_policy == EPS_VALUE")
+                doc_parameter("fill_value", "float", "value to fill any gap with if fill_policy == EPF_FILL")
+                doc_returns("extended_ts" ,"TimeSeries", "a new time-series that is the extension of self with ts")
             )
             .def("min",min_double_f,args("number"),"create a new ts that contains the min of self and number for each time-step")
             .def("min",min_ts_f,args("ts_other"),"create a new ts that contains the min of self and ts_other")
@@ -540,6 +646,140 @@ namespace expose {
 				;
 		}
     }
+
+	static void expose_rating_curve_classes() {
+
+		// overloads for rating_curve_segment::flow
+		double (shyft::core::rating_curve_segment::*rcs_flow_1)(double) const = &shyft::core::rating_curve_segment::flow;
+		std::vector<double> (shyft::core::rating_curve_segment::*rcs_flow_2)(const std::vector<double> &, std::size_t, std::size_t) const = &shyft::core::rating_curve_segment::flow;
+
+		class_<shyft::core::rating_curve_segment>("RatingCurveSegment",
+				doc_intro("Represent a single rating-curve equation.")
+				doc_intro("")
+				doc_intro("The rating curve function is `a*(h - b)^c` where `a`, `b`, and `c` are parameters")
+				doc_intro("for the segment and `h` is the water level to compute flow for. Additionally there")
+				doc_intro("is a `lower` parameter for the least water level the segment is valid for. Seen")
+				doc_intro("separatly a segment is considered valid for any level greater than `lower`.")
+				doc_intro("")
+				doc_intro("The function segments are gathered into `RatingCurveFunction`s to represent a")
+				doc_intro("set of different rating functions for different levels.")
+				doc_see_also("RatingCurveFunction, RatingCurveParameters")
+			)
+			.def_readonly("lower", &shyft::core::rating_curve_segment::lower,
+						  "Least valid water level. Not mutable after constructing a segment.")
+			.def_readwrite("a", &shyft::core::rating_curve_segment::a, "Parameter a")
+			.def_readwrite("b", &shyft::core::rating_curve_segment::b, "Parameter b")
+			.def_readwrite("c", &shyft::core::rating_curve_segment::c, "Parameter c")
+			.def(init<double, double, double, double>(args("lower", "a", "b", "c"), "Defines a new RatingCurveSegment with the specified parameters"))
+			.def("valid", &shyft::core::rating_curve_segment::valid, (py::args("level")),
+					doc_intro("Check if a water level is valid for the curve segment")
+					doc_parameter("level", "float", "water level")
+					doc_returns("valid", "bool", "True if level is greater or equal to lower")
+				)
+            //NOTE: For some reason boost 1.65 needs this def *before* the other simpler def, otherwise it fails finding the simple one
+            .def("flow", rcs_flow_2, (py::arg("levels"), py::arg("i0") = 0u, py::arg("iN") = std::numeric_limits<std::size_t>::max()),
+                doc_intro("Compute the flow for a range of water levels")
+                doc_parameters()
+                doc_parameter("levels", "DoubleVector", "Vector of water levels")
+                doc_parameter("i0", "int", "first index to use from levels, defaults to 0")
+                doc_parameter("iN", "int", "first index _not_ to use from levels, defaults to std::size_t maximum.")
+                doc_returns("flow", "DoubleVector", "Vector of flow values.")
+            )
+            .def("flow", rcs_flow_1, (py::arg("level")),
+					doc_intro("Compute the flow for the given water level.")
+					doc_notes()
+					doc_note("There is _no_ check to see if level is valid. It's up to the user to call")
+					doc_note("with a correct level.")
+					doc_parameters()
+					doc_parameter("level", "float", "water level")
+					doc_returns("flow", "double", "the flow for the given water level")
+				)
+			.def("__str__", &shyft::core::rating_curve_segment::operator std::string, "Stringify the segment.")
+			;
+
+		// overloads for rating_curve_function::flow
+		double (shyft::core::rating_curve_function::*rcf_flow_val)(double) const = &shyft::core::rating_curve_function::flow;
+		std::vector<double> (shyft::core::rating_curve_function::*rcf_flow_vec)(const std::vector<double> & ) const = &shyft::core::rating_curve_function::flow;
+		// overloads for rating_curve_function::add_segment
+		void (shyft::core::rating_curve_function::*rcf_add_args)(double, double, double, double) = &shyft::core::rating_curve_function::add_segment;
+		void (shyft::core::rating_curve_function::*rcf_add_obj)(const rating_curve_segment & ) = &shyft::core::rating_curve_function::add_segment;
+
+		class_<shyft::core::rating_curve_function>("RatingCurveFunction",
+				doc_intro("Combine multiple RatingCurveSegments into a rating function.")
+				doc_intro("")
+				doc_intro("RatingCurveFunction aggregates multiple RatingCurveSegments and routes.")
+				doc_intro("computation calls to the correct segment based on the water level to compute for.")
+				doc_see_also("RatingCurveSegment, RatingCurveParameters")
+			)
+			.def(init<>("Defines a new empty rating curve function."))
+			.def("size", &shyft::core::rating_curve_function::size, "Get the number of RatingCurveSegments composing the function.")
+			.def("add_segment", rcf_add_args, (py::arg("lower"), py::arg("a"), py::arg("b"), py::arg("c")),
+					doc_intro("Add a new curve segment with the given parameters.")
+					doc_see_also("RatingCurveSegment")
+				)
+			.def("add_segment", rcf_add_obj, py::arg("segment"),
+					doc_intro("Add a new curve segment as a copy of an exting.")
+					doc_see_also("RatingCurveSegment")
+				)
+            // ref. note above regarding the order of overloaded member functions
+            .def("flow", rcf_flow_vec, py::arg("levels"),
+                doc_intro("Compute flow for a range of water levels.")
+                doc_parameters()
+                doc_parameter("levels", "DoubleVector", "Range of water levels to compute flow for.")
+            )
+            .def("flow", rcf_flow_val, py::arg("level"),
+					doc_intro("Compute flow for the given level.")
+					doc_parameters()
+					doc_parameter("level", "float", "Water level to compute flow for.")
+				)
+			.def("__iter__", py::range(&shyft::core::rating_curve_function::cbegin,
+									   &shyft::core::rating_curve_function::cend),
+				 "Constant iterator. Invalidated on calls to .add_segment")
+			.def("__str__", &shyft::core::rating_curve_function::operator std::string, "Stringify the function.")
+			;
+
+		// overloads for rating_curve_function::flow
+		double (shyft::core::rating_curve_parameters::*rcp_flow_val)(utctime, double) const = &shyft::core::rating_curve_parameters::flow;
+		std::vector<double> (shyft::core::rating_curve_parameters::*rcp_flow_ts)(const shyft::api::apoint_ts & ) const = &shyft::core::rating_curve_parameters::flow<shyft::api::apoint_ts>;
+		// overloads for rating_curve_function::add_segment
+		void (shyft::core::rating_curve_parameters::*rcp_add_obj)(utctime, const rating_curve_function & ) = &shyft::core::rating_curve_parameters::add_curve;
+
+		class_<shyft::core::rating_curve_parameters>("RatingCurveParameters",
+				doc_intro("Parameter pack controlling rating level computations.")
+				doc_intro("")
+				doc_intro("A parameter pack encapsulates multiple RatingCurveFunction's with time-points.")
+				doc_intro("When used with a TimeSeries representing level values it maps computations for")
+				doc_intro("each level value onto the correct RatingCurveFunction, which again maps onto the")
+				doc_intro("correct RatingCurveSegment for the level value.")
+				doc_see_also("RatingCurveSegment, RatingCurveFunction, TimeSeries.rating_curve")
+			)
+			.def(init<>("Defines a empty RatingCurveParameter instance"))
+			.def("add_curve", rcp_add_obj, (py::arg("t"), py::arg("curve")),
+					doc_intro("Add a curve to the parameter pack.")
+					doc_parameters()
+					doc_parameter("t", "RatingCurveFunction", "First time-point the curve is valid for.")
+					doc_parameter("curve", "RatingCurveFunction", "RatingCurveFunction to add at t.")
+				)
+			.def("flow", rcp_flow_val, (py::arg("t"), py::arg("level")),
+					doc_intro("Compute the flow at a specific time point.")
+					doc_parameters()
+					doc_parameter("t", "utctime", "Time-point of the level value.")
+					doc_parameter("level", "float", "Level value at t.")
+					doc_returns("flow", "float", "Flow correcponding to input level at t, `nan` if level is less than the least water level of the first segment or before the time of the first rating curve function.")
+				)
+			.def("flow", rcp_flow_ts, py::arg("ts"),
+					doc_intro("Compute the flow at a specific time point.")
+					doc_parameters()
+					doc_parameter("ts", "TimeSeries", "Time series of level values.")
+					doc_returns("flow", "DoubleVector", "Flow correcponding to the input levels of the time-series, `nan` where the level is less than the least water level of the first segment and for time-points before the first rating curve function.")
+				)
+			.def("__iter__", py::range(&shyft::core::rating_curve_parameters::cbegin,
+									   &shyft::core::rating_curve_parameters::cend),
+				 "Constant iterator. Invalidated on calls to .add_curve")
+			.def("__str__", &shyft::core::rating_curve_parameters::operator std::string, "Stringify the parameters.")
+			;
+	}
+
 	static void expose_correlation_functions() {
 		const char * kg_doc =
 			doc_intro("Computes the kling-gupta KGEs correlation for the two time-series over the specified time_axis")
@@ -595,6 +835,29 @@ namespace expose {
             .value("MAX_EXTREME",time_series::statistics_property::MAX_EXTREME)
             ;
 
+        enum_<time_series::api::extend_ts_fill_policy>(
+            "extend_fill_policy",
+            "Ref TimeSeries.extend function, this policy determines how to represent values in a gap\n"
+            "EPF_NAN : use nan values in the gap\n"
+            "EPF_LAST: use the last value before the gap\n"
+            "EPF_FILL: use a supplied value in the gap\n"
+            )
+            .value("FILL_NAN",   time_series::api::extend_ts_fill_policy::EPF_NAN)
+            .value("USE_LAST",   time_series::api::extend_ts_fill_policy::EPF_LAST)
+            .value("FILL_VALUE", time_series::api::extend_ts_fill_policy::EPF_FILL)
+            ;
+        enum_<time_series::api::extend_ts_split_policy>(
+            "extend_split_policy",
+            "Ref TimeSeries.extend function, this policy determines where to split/shift from one ts to the other\n"
+            "EPS_LHS_LAST : use nan values in the gap\n"
+            "EPS_RHS_FIRST: use the last value before the gap\n"
+            "EPS_VALUE    : use a supplied value in the gap\n"
+            )
+            .value("LHS_LAST",  time_series::api::extend_ts_split_policy::EPS_LHS_LAST)
+            .value("RHS_FIRST", time_series::api::extend_ts_split_policy::EPS_RHS_FIRST)
+            .value("AT_VALUE",  time_series::api::extend_ts_split_policy::EPS_VALUE)
+            ;
+
         enum_<time_series::convolve_policy>(
             "convolve_policy",
             "Ref Timeseries.convolve_w function, this policy determinte how to handle initial conditions\n"
@@ -615,6 +878,7 @@ namespace expose {
         point_ts<time_axis::fixed_dt>("TsFixed","A time-series with a fixed delta t time-axis, used by the Shyft core,see also TimeSeries for end-user ts");
         point_ts<time_axis::point_dt>("TsPoint","A time-series with a variable delta time-axis, used by the Shyft core,see also TimeSeries for end-user ts");
         TsFactory();
+		expose_rating_curve_classes();
         expose_apoint_ts();
 		expose_periodic_ts();
 		expose_correlation_functions();

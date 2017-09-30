@@ -34,7 +34,7 @@ namespace shyft {
              * f_rhs_is_zero is set, f(b) = 0, unless b = x[i] for some i in
              * [0,n).
              */
-            inline double integrate(vector<double> f, vector<double> x, 
+            inline double integrate(vector<double> f, vector<double> x,
                                     size_t n, double a, double b,
                                     bool f_b_is_zero=false) {
                 size_t left = 0;
@@ -46,7 +46,7 @@ namespace shyft {
                 // Linear interpolation of start point
                 if (fabs(a - x[left]) > 1.0e-8 && left > 0) {
                     --left;
-                    f_l = ((f[left + 1] - f[left]) / 
+                    f_l = ((f[left + 1] - f[left]) /
                            (x[left + 1] - x[left]) * (a - x[left]) + f[left]);
                 } else
                     f_l = f[left];
@@ -60,7 +60,7 @@ namespace shyft {
                     }
                     else {
                         if (! f_b_is_zero)
-                            area += (f_l + 0.5 * (f[left + 1] - f_l) / 
+                            area += (f_l + 0.5 * (f[left + 1] - f_l) /
                                      (x[left + 1] - x_l) * (b - x_l))*(b - x_l);
                         else
                             area += 0.5*f_l*(b - x_l);
@@ -106,9 +106,9 @@ namespace shyft {
                         double fast_albedo_decay_rate=5.0,
                         double slow_albedo_decay_rate=5.0,
                         double snowfall_reset_depth=5.0,
-                        bool calculate_iso_pot_energy=false) 
+                        bool calculate_iso_pot_energy=false)
                             : tx(tx), lw(lw), cfr(cfr), wind_scale(wind_scale),
-                              wind_const(wind_const), 
+                              wind_const(wind_const),
                               surface_magnitude(surface_magnitude),
                               max_albedo(max_albedo),
                               min_albedo(min_albedo),
@@ -120,7 +120,7 @@ namespace shyft {
                     set_std_distribution_and_quantiles();
                 }
 
-                parameter(const vector<double>& s, 
+                parameter(const vector<double>& s,
                         const vector<double>& intervals,
                         double tx=0.0, double lw=0.1, double cfr=0.5,
                         double wind_scale=2.0, double wind_const=1.0,
@@ -129,10 +129,10 @@ namespace shyft {
                         double fast_albedo_decay_rate=5.0,
                         double slow_albedo_decay_rate=5.0,
                         double snowfall_reset_depth=5.0,
-                        bool calculate_iso_pot_energy=false) 
-                            : s(s), intervals(intervals), tx(tx), lw(lw), 
+                        bool calculate_iso_pot_energy=false)
+                            : s(s), intervals(intervals), tx(tx), lw(lw),
                               cfr(cfr), wind_scale(wind_scale),
-                              wind_const(wind_const), 
+                              wind_const(wind_const),
                               surface_magnitude(surface_magnitude),
                               max_albedo(max_albedo),
                               min_albedo(min_albedo),
@@ -165,12 +165,12 @@ namespace shyft {
 
                 state() = default;
 
-                state(const vector<double>& albedo, 
+                state(const vector<double>& albedo,
                       const vector<double>& iso_pot_energy,
                       double surface_heat=30000.0, double swe=0.0,
-                      double sca=0.0) 
+                      double sca=0.0)
                     : albedo(albedo), iso_pot_energy(iso_pot_energy),
-                      surface_heat(surface_heat), swe(swe), sca(sca) 
+                      surface_heat(surface_heat), swe(swe), sca(sca)
                 {}
 
                 bool operator==(const state &x) const {
@@ -180,7 +180,7 @@ namespace shyft {
                         return false;
                     }
                     for (size_t i=0; i<albedo.size(); ++i) {
-                        if (fabs(albedo[i] - x.albedo[i]) >= eps || 
+                        if (fabs(albedo[i] - x.albedo[i]) >= eps ||
                                 fabs(iso_pot_energy[i] - x.iso_pot_energy[i]) >=
                                 eps) {
                             return false;
@@ -225,7 +225,7 @@ namespace shyft {
              * \tparam R Response type, containing the member variables:
              *    - R.outflow --> double, the value of the outflow [mm]
              *    - R.storage --> double, the value of the swe [mm]
-             *    - R.sca --> double, the value of the snow covered area 
+             *    - R.sca --> double, the value of the snow covered area
              *    - R.state --> shyft::core::hbv_physical_snow::state, containing
              *          the current state.
              */
@@ -244,7 +244,7 @@ namespace shyft {
                 const double sigma = 5.670373e-8;
                 const double BB0{0.98*sigma*pow(273.15,4)};
 
-                void refreeze(double &sp, double &sw, const double rain, 
+                void refreeze(double &sp, double &sw, const double rain,
                         const double potmelt, const double lw) {
                     // Note that the above calculations might violate the mass
                     // balance due to rounding errors. A fix might be to
@@ -334,24 +334,24 @@ namespace shyft {
                   * \param rel_hum 0..1
                   */
                 void step(S& s, R& r, shyft::time_series::utctime t,
-                        shyft::time_series::utctimespan dt, const P& p, 
-                        const double T, const double rad, 
+                        shyft::time_series::utctimespan dt, const P& p,
+                        const double T, const double rad,
                         const double prec_mm_h, const double wind_speed,
                         const double rel_hum) {
-                
+
                     vector<double> iso_pot_energy = s.iso_pot_energy;
                     double sca = s.sca;
                     double swe = s.swe;
                     const double prec = prec_mm_h*dt/calendar::HOUR;
                     const double total_water = prec + swe;
-                
+
                     double snow;
                     double rain;
                     if( T < p.tx ) {snow = prec; rain = 0.0;}
                     else           {snow = 0.0;rain = prec;}
                     if (fabs(snow + rain - prec) > 1.0e-8)
                         throw std::runtime_error("Mass balance violation!!!!");
-                
+
                     swe += snow + sca * rain;
                     //Roughly the same as the 'early autumn scenario' of
                     //gamma_snow - i.e. no stored or precipitated snow
@@ -362,47 +362,47 @@ namespace shyft {
                         fill(begin(sw), end(sw), 0.0);
                         s.swe = 0.0;
                         s.sca = 0.0;
-                
+
                         r.sca = 0.0;
                         r.storage = 0.0;
-                
+
                         std::fill(s.albedo.begin(), s.albedo.end(),
                                   p.max_albedo);
                         s.surface_heat = 0.0;
-                        std::fill(s.iso_pot_energy.begin(), 
+                        std::fill(s.iso_pot_energy.begin(),
                                   s.iso_pot_energy.end(), 0.0);
                         return;
                     }
-                
+
                     // Trivial case is out of the way, now more complicated
-                    
+
                     // State vars
                     vector<double> albedo = s.albedo;
                     double surface_heat = s.surface_heat;
-                
+
                     // Response vars;
-                    double outflow = 0.0;
-                
+                    //double outflow = 0.0;
+
                     // Local variables
 
                     const double min_albedo = p.min_albedo;
                     const double max_albedo = p.max_albedo;
                     const double albedo_range = max_albedo - min_albedo;
                     const double dt_in_days = dt/double(calendar::DAY);
-                    const double slow_albedo_decay_rate = (0.5 * albedo_range * 
+                    const double slow_albedo_decay_rate = (0.5 * albedo_range *
                             dt_in_days/p.slow_albedo_decay_rate);
-                    const double fast_albedo_decay_rate = pow(2.0, 
+                    const double fast_albedo_decay_rate = pow(2.0,
                             -dt_in_days/p.fast_albedo_decay_rate);
-                
+
                     const double T_k = T + 273.15; // Temperature in Kelvin
                     const double turb = p.wind_scale*wind_speed + p.wind_const;
                     double vapour_pressure = (
-                            33.864 * (pow(7.38e-3*T + 0.8072, 8) - 
-                                1.9e-5*fabs(1.8*T + 48.0) + 1.316e-3) * 
+                            33.864 * (pow(7.38e-3*T + 0.8072, 8) -
+                                1.9e-5*fabs(1.8*T + 48.0) + 1.316e-3) *
                             rel_hum);
                     if (T < 0.0)  // Change VP over water to VP over ice (Bosen)
                         vapour_pressure *= 1.0 + 9.72e-3*T + 4.2e-5*T*T;
-                
+
                     // There is some snowfall. Here we update the snowpack and
                     // wet snow to reflect the new snow. We also
                     // update albedo.
@@ -413,23 +413,23 @@ namespace shyft {
                                 sp[0] *= sca/(I[1] - I[0]);
                                 sw[0] *= sca/(I[1] - I[0]);
                             } else {
-                                sp[idx] *= (1.0 + (sca - I[idx]) / (I[idx] - 
-                                            I[idx - 1])) / (1.0 + (I[idx + 1] - 
+                                sp[idx] *= (1.0 + (sca - I[idx]) / (I[idx] -
+                                            I[idx - 1])) / (1.0 + (I[idx + 1] -
                                                 I[idx])/(I[idx] - I[idx - 1]));
-                                sw[idx] *= (1.0 + (sca - I[idx]) / (I[idx] - 
+                                sw[idx] *= (1.0 + (sca - I[idx]) / (I[idx] -
                                             I[idx - 1])) / (1.0 + (I[idx + 1] -
                                                 I[idx])/(I[idx] - I[idx - 1]));
                             }
                         }
-                
-                        for (size_t i = 0; i < I_n; ++i) 
+
+                        for (size_t i = 0; i < I_n; ++i)
                         {
                             double currsnow = snow * sd[i];
                             sp[i] += currsnow;
-                            albedo[i] += (currsnow * albedo_range / 
+                            albedo[i] += (currsnow * albedo_range /
                                           p.snowfall_reset_depth);
                         }
-                
+
                         for (size_t i = I_n - 2; i > 0; --i)
                             if (sd[i] > 0.0) {
                                 sca = sd[i + 1];
@@ -444,32 +444,32 @@ namespace shyft {
                             }
                         } else {
                             for (auto &alb: albedo) {
-                                alb = (min_albedo + fast_albedo_decay_rate * 
+                                alb = (min_albedo + fast_albedo_decay_rate *
                                        (alb - min_albedo));
                             }
                         }
                     }
-                
+
                     // We now start calculation of energy content based on
                     // current albedoes etc.
 
                     for (auto &alb: albedo) {
-                        alb = std::max(std::min(alb, max_albedo), 
+                        alb = std::max(std::min(alb, max_albedo),
                                        min_albedo);
                     }
-                
+
                     vector<double> effect;
                     for (auto alb: albedo) {
                         effect.push_back(rad * (1.0 - alb));
                     }
 
-                
+
                     for (auto &eff: effect) {
-                        eff += (0.98 * sigma * 
-                                pow(vapour_pressure/T_k, 6.87e-2) * 
+                        eff += (0.98 * sigma *
+                                pow(vapour_pressure/T_k, 6.87e-2) *
                                 pow(T_k, 4));
                     }
-                
+
                     if (T > 0.0 && snow < hbv_physical_snow::tol) {
                         for (auto &eff: effect) {
                             eff += rain * T * water_heat/(double)dt;
@@ -481,7 +481,7 @@ namespace shyft {
                         }
                     //TODO: Should the snow distribution be included here?
                 //        effect += snow*T*ice_heat/(double)dt;
-                
+
                     if (p.calculate_iso_pot_energy) {
                         for (size_t i=0; i<I_n; ++i) {
                             double iso_effect = (effect[i] - BB0 + turb *
@@ -494,25 +494,25 @@ namespace shyft {
                     double sst = std::min(0.0, 1.16*T - 2.09);
                     if (sst > -hbv_physical_snow::tol) {
                         for (auto &eff: effect) {
-                            eff += turb * (T + 1.7 * 
+                            eff += turb * (T + 1.7 *
                                     (vapour_pressure - 6.12)) - BB0;
                         }
                     } else {
                         for (auto &eff: effect) {
-                            eff += (turb * (T - sst + 1.7 * 
-                                        (vapour_pressure - 6.132 * 
-                                         exp(0.103 * T - 0.186))) - 
+                            eff += (turb * (T - sst + 1.7 *
+                                        (vapour_pressure - 6.132 *
+                                         exp(0.103 * T - 0.186))) -
                                     0.98 * sigma * pow(sst + 273.15, 4));
                         }
                     }
-                    
+
                     // Surface heat change, positive during warming
                     double delta_sh = -surface_heat;
 
                     // New surface heat; always nonpositive since sst <= 0.
                     surface_heat = p.surface_magnitude*ice_heat*sst*0.5;
                     delta_sh += surface_heat;
-                
+
                     vector<double> energy;
                     for (auto eff : effect) {
                         energy.push_back(eff * (double)dt);
@@ -522,7 +522,7 @@ namespace shyft {
                 //        energy -= delta_sh;  // Surface energy is a sink, but not a source
                         for (auto &en: energy) en -= delta_sh;
                     }
-                
+
                     vector<double> potential_melt;
                     for (auto en: energy) {
                         //This is a difference from the physical model: We
@@ -531,15 +531,15 @@ namespace shyft {
                         //as refreeze.
                         potential_melt.push_back(en/melt_heat);
                     }
-                
+
                     // We have now calculated the potential melt in each bin
                     // and now update the distributions and outflow etc. to
                     // reflect that.
                     const double lw = p.lw;
-                
+
                     size_t idx = I_n;
                     bool any_melt = false;
-                
+
                     for (size_t i=0; i<I_n; ++i) {
                         if (potential_melt[i] >= hbv_physical_snow::tol) {
                             any_melt = true;
@@ -549,24 +549,24 @@ namespace shyft {
                             }
                         }
                     }
-                
+
                     // If there is melting at all
                     if (any_melt) {
                         if (idx == 0) sca = 0.0;
                         else if (idx == I_n) sca = 1.0;
                         else {
                             if (sp[idx] > 0.0) {
-                                sca = (I[idx] - (I[idx] - I[idx - 1]) * 
-                                        (potential_melt[idx] - sp[idx]) / 
+                                sca = (I[idx] - (I[idx] - I[idx - 1]) *
+                                        (potential_melt[idx] - sp[idx]) /
                                         (sp[idx - 1] = sp[idx]));
                             } else {
-                                sca = (1.0 - potential_melt[idx]/sp[idx - 1]) * 
+                                sca = (1.0 - potential_melt[idx]/sp[idx - 1]) *
                                     (sca - I[idx - 1]) + I[idx - 1];
                             }
                         }
                     }
-                
-                
+
+
                     // If negative melt, we treat it as refreeze,
                     // otherwise we update the snowpack and wet snow.
                     for (size_t i=0; i<I_n; ++i) {
@@ -574,23 +574,23 @@ namespace shyft {
                             refreeze(sp[i], sw[i], rain,
                                      p.cfr*potential_melt[i], lw);
                         } else {
-                            update_state(sp[i], sw[i], rain, potential_melt[i], 
+                            update_state(sp[i], sw[i], rain, potential_melt[i],
                                          lw);
                         }
                     }
-                
+
                     if (sca < hbv_physical_snow::tol) swe = 0.0;
                     else {
                         bool f_is_zero = sca >= 1.0 ? false : true;
                         swe = integrate(sp, I, I_n, 0, sca, f_is_zero);
                         swe += integrate(sw, I, I_n, 0, sca, f_is_zero);
                     }
-                
+
                     if (total_water < swe) {
                         if (total_water - swe < -hbv_physical_snow::tol) {
                             ostringstream buff;
-                            buff << "Negative outflow: total_water (" << 
-                                total_water << ") - swe (" << swe << ") = " 
+                            buff << "Negative outflow: total_water (" <<
+                                total_water << ") - swe (" << swe << ") = "
                                 << total_water - swe;
                             throw runtime_error(buff.str());
                         } else

@@ -14,6 +14,7 @@ from shyft import shyftdata_dir
 from .. import interfaces
 from .time_conversion import convert_netcdf_time
 
+
 class CFDataRepositoryError(Exception):
     pass
 
@@ -61,7 +62,7 @@ class CFDataRepository(interfaces.GeoTsRepository):
                               "precipitation": "precipitation",
                               "precipitation_amount_acc": "precipitation",
                               "wind_speed": "wind_speed",
-                              "global_radiation":"radiation",
+                              "global_radiation": "radiation",
                               "discharge": "discharge"}
 
         self._shift_fields = ("precipitation_amount_acc",
@@ -146,7 +147,7 @@ class CFDataRepository(interfaces.GeoTsRepository):
         else:
             raise CFDataRepositoryError("Unrecognized selection criteria.")
 
-    def _convert_to_timeseries(self, data):
+    def _convert_to_timeseries(self, data_map):
         """Convert timeseries from numpy structures to shyft.api timeseries.
 
         We assume the time axis is regular, and that we can use a point time
@@ -159,9 +160,9 @@ class CFDataRepository(interfaces.GeoTsRepository):
         timeseries: dict
             Time series arrays keyed by type
         """
-        tsc = api.TsFactory().create_point_ts
+
         time_series = {}
-        for key, (data, ta) in data.items():
+        for key, (data, ta) in data_map.items():
             fslice = (len(data.shape) - 2)*[slice(None)]
             I, J = data.shape[-2:]
 
@@ -170,8 +171,8 @@ class CFDataRepository(interfaces.GeoTsRepository):
                     raise CFDataRepositoryError("Time axis size {} not equal to the number of "
                                                    "data points ({}) for {}"
                                                    "".format(ta.size(), d.size, key))
-                return tsc(ta.size(), ta.start, ta.delta_t,
-                           api.DoubleVector.FromNdArray(d.flatten()))
+                return api.TimeSeries(ta, api.DoubleVector.FromNdArray(d.flatten()), api.POINT_AVERAGE_VALUE)
+
             #time_series[key] = np.array([[construct(data[fslice + [i, j]])
             #                              for j in range(J)] for i in range(I)])
             time_series[key] = np.array([construct(data[:,j]) for j in range(J)])                                
@@ -215,38 +216,22 @@ class CFDataRepository(interfaces.GeoTsRepository):
             y_min, y_max = min(bb_proj[1]), max(bb_proj[1])
 
             # Limit data
-            x_upper = x >= x_min
-            x_lower = x <= x_max
-            y_upper = y >= y_min
-            y_lower = y <= y_max
-            if sum(x_upper == x_lower) < 2:
-                if sum(x_lower) == 0 and sum(x_upper) == len(x_upper):
-                    raise CFDataRepositoryError("Bounding box longitudes don't intersect with dataset.")
-                x_upper[np.argmax(x_upper) - 1] = True
-                x_lower[np.argmin(x_lower)] = True
-            if sum(y_upper == y_lower) < 2:
-                if sum(y_lower) == 0 and sum(y_upper) == len(y_upper):
-                    raise CFDataRepositoryError("Bounding box latitudes don't intersect with dataset.")
-                y_upper[np.argmax(y_upper) - 1] = True
-                y_lower[np.argmin(y_lower)] = True
+            xy_mask = ((x <= x_max) & (x >= x_min) & (y <= y_max) & (y >= y_min))
 
-            x_inds = np.nonzero(x_upper == x_lower)[0]
-            y_inds = np.nonzero(y_upper == y_lower)[0]
-
-            # Masks
-            x_mask = x_upper == x_lower
-            y_mask = y_upper == y_lower
-            xy_mask = ((x_mask)&(y_mask))
-
-        if(list(self.selection_criteria)[0]=='unique_id'):
+        if (list(self.selection_criteria)[0] == 'unique_id'):
             xy_mask = np.array([id in self.selection_criteria['unique_id'] for id in ts_id])
-            x_inds = y_inds = np.nonzero(xy_mask)[0]
 
+        # Check if there is at least one point extaracted and raise error if there isn't
+        if not xy_mask.any():
+            raise CFDataRepositoryError("No points in dataset which satisfy selection criterion '{}'.".
+                                              format(list(self.selection_criteria)[0]))
+
+        xy_inds = np.nonzero(xy_mask)[0]
 
         # Transform from source coordinates to target coordinates
         xx, yy = transform(data_proj, target_proj, x[xy_mask], y[xy_mask])
 
-        return xx, yy, xy_mask, (x_inds, y_inds)
+        return xx, yy, xy_mask, xy_inds
 
     def _get_data_from_dataset(self, dataset, input_source_types, utc_period,
                                geo_location_criteria, ensemble_member=None):
@@ -255,7 +240,7 @@ class CFDataRepository(interfaces.GeoTsRepository):
             self.selection_criteria = {'bbox':geo_location_criteria}
             self._bounding_box = geo_location_criteria
         if list(self.selection_criteria)[0]=='unique_id':
-            ts_id_key = [k for (k, v) in dataset.variables.items() if getattr(v, 'cf_role',None) == 'timeseries_id'][0]
+            ts_id_key = [k for (k, v) in dataset.variables.items() if getattr(v, 'cf_role', None) == 'timeseries_id'][0]
             ts_id = dataset.variables[ts_id_key][:]
 
         raw_data = {}
@@ -266,7 +251,7 @@ class CFDataRepository(interfaces.GeoTsRepository):
         if not all([x, y, time]):
             raise CFDataRepositoryError("Something is wrong with the dataset."
                                            " x/y coords or time not found.")
-        time = convert_netcdf_time(time.units,time)
+        time = convert_netcdf_time(time.units, time)
         data_cs = dataset.variables.get("crs", None)
         if data_cs is None:
             raise CFDataRepositoryError("No coordinate system information in dataset.")
@@ -308,7 +293,7 @@ class CFDataRepository(interfaces.GeoTsRepository):
         else:
             raise CFDataRepositoryError("No elevations found in dataset")
 
-        pts = np.dstack((x, y, z)).reshape(-1,3)
+        pts = np.dstack((x, y, z)).reshape(-1, 3)
         self.pts = pts
 
         # Make sure requested fields are valid, and that dataset contains the requested data.
@@ -325,14 +310,10 @@ class CFDataRepository(interfaces.GeoTsRepository):
         """
 
         def noop_time(t):
-            t0 = int(t[0])
-            t1 = int(t[1])
-            return api.TimeAxisFixedDeltaT(t0, t1 - t0, len(t))
+            return api.TimeAxis(api.UtcTimeVector.from_numpy(t.astype(int)), int(2*t[-1] - t[-2]))
 
         def dacc_time(t):
-            t0 = int(t[0])
-            t1 = int(t[1])
-            return noop_time(t) if issubset else api.TimeAxisFixedDeltaT(t0, t1 - t0, len(t) - 1)
+            return noop_time(t) if issubset else api.TimeAxis(api.UtcTimeVector.from_numpy(t.astype(int)))
 
         def noop_space(x):
             return x

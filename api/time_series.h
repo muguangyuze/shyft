@@ -1,6 +1,15 @@
 #pragma once
+#ifdef SHYFT_NO_PCH
+#include <string>
+#include <vector>
+#include <algorithm>
+#include <memory>
+#include <utility>
+#include <map>
 
 #include "core/core_pch.h"
+#endif // SHYFT_NO_PCH
+
 #include "core/utctime_utilities.h"
 #include "core/time_axis.h"
 #include "core/time_series.h"
@@ -126,6 +135,23 @@ namespace shyft {
         struct aref_ts;// fwd api
         struct ts_bind_info;
         struct ats_vector;//fwd
+        struct abs_ts;//fwd
+
+		/** \brief Enumerates fill policies for time-axis extension.
+		 */
+		enum extend_ts_fill_policy {
+			EPF_NAN,   /**< Fill any gap between the time-axes with NaN. */
+			EPF_LAST,  /**< At a gap, keep the last time-axis value through a gap. */
+			EPF_FILL,  /**< Fill any gap between the time-axes with a given value. */
+		};
+
+		/** \brief Enumerates split policies for time-axis extension.
+		 */
+		enum extend_ts_split_policy {
+			EPS_LHS_LAST,   /**< Split at the last value of the lhs ts. */
+			EPS_RHS_FIRST,  /**< Split at the first value of the rhs ts. */
+			EPS_VALUE,      /**< Split at a given time-value. */
+		};
 
         /** \brief  apoint_ts, a value-type conceptual ts.
          *
@@ -145,6 +171,7 @@ namespace shyft {
            friend struct time_shift_ts;
            friend struct accumulate_ts;
            friend struct aglacier_melt_ts;
+           friend struct abs_ts;
             // constructors that we want to expose
             // like
 
@@ -154,7 +181,7 @@ namespace shyft {
 
             apoint_ts(const time_axis::point_dt& ta,double fill_value,ts_point_fx point_fx=POINT_INSTANT_VALUE);
             apoint_ts(const time_axis::point_dt& ta,const std::vector<double>& values,ts_point_fx point_fx=POINT_INSTANT_VALUE);
-            apoint_ts(const rts_t & rts);// ct for result-ts at cell-level that we want to wrap.
+            explicit apoint_ts(const rts_t & rts);// ct for result-ts at cell-level that we want to wrap.
             apoint_ts(const vector<double>& pattern, utctimespan dt, const time_axis::generic_dt& ta);
             apoint_ts(const vector<double>& pattern, utctimespan dt, utctime pattern_t0,const time_axis::generic_dt& ta);
             // these are the one we need.
@@ -164,15 +191,17 @@ namespace shyft {
 
             apoint_ts(gta_t&& ta,std::vector<double>&& values,ts_point_fx point_fx=POINT_INSTANT_VALUE);
             apoint_ts(gta_t&& ta,double fill_value,ts_point_fx point_fx=POINT_INSTANT_VALUE);
-            apoint_ts(const std::shared_ptr<ipoint_ts>& c):ts(c) {}
+            explicit apoint_ts(const std::shared_ptr<ipoint_ts>& c):ts(c) {}
 
-            apoint_ts(std::string ref_ts_id);
+            explicit apoint_ts(std::string ref_ts_id);
+            apoint_ts(std::string ref_ts_id, const apoint_ts& x);
             // some more exotic stuff like average_ts
 
             apoint_ts()=default;
             bool needs_bind() const {
                 return sts()->needs_bind();
             }
+            string id() const;///< if the ts is aref_ts return it's id (or maybe better url?)
             void do_bind() {
                 sts()->do_bind();
             }
@@ -209,6 +238,9 @@ namespace shyft {
             std::vector<double> values() const {return ts?ts->values():std::vector<double>();}
 
             //-- then some useful functions/properties
+            apoint_ts extend( const apoint_ts & ts,
+                extend_ts_split_policy split_policy, extend_ts_fill_policy fill_policy,
+                utctime split_at, double fill_value ) const;
             apoint_ts average(const gta_t& ta) const;
             apoint_ts integral(gta_t const &ta) const;
             apoint_ts accumulate(const gta_t& ta) const;
@@ -221,6 +253,8 @@ namespace shyft {
             static apoint_ts min(const apoint_ts& a, const apoint_ts& b);
             ats_vector partition_by(const calendar& cal, utctime t, utctimespan partition_interval, size_t n_partitions, utctime common_t0) const;
             apoint_ts convolve_w(const std::vector<double>& w, shyft::time_series::convolve_policy conv_policy) const;
+            apoint_ts abs() const;
+			apoint_ts rating_curve(const rating_curve_parameters & rc_param) const;
 
             //-- in case the underlying ipoint_ts is a gpoint_ts (concrete points)
             //   we would like these to be working (exception if it's not possible,i.e. an expression)
@@ -276,6 +310,8 @@ namespace shyft {
         struct gpoint_ts:ipoint_ts {
             gts_t rep;
             // To create gpoint_ts, we use const ref, move ct wherever possible:
+            explicit gpoint_ts(gts_t&&x):rep(std::move(x)){};
+            explicit gpoint_ts(const gts_t&x):rep(x){}
             // note (we would normally use ct template here, but we are aiming at exposing to python)
             gpoint_ts(const gta_t&ta,double fill_value,ts_point_fx point_fx=POINT_INSTANT_VALUE):rep(ta,fill_value,point_fx){}
             gpoint_ts(const gta_t&ta,const std::vector<double>& v,ts_point_fx point_fx=POINT_INSTANT_VALUE):rep(ta,v,point_fx) {}
@@ -308,7 +344,7 @@ namespace shyft {
         struct aref_ts:ipoint_ts {
             typedef shyft::time_series::ref_ts<gts_t> ref_ts_t;
             ref_ts_t rep;
-            aref_ts(string sym_ref):rep(sym_ref) {}
+            explicit aref_ts(const string& sym_ref):rep(sym_ref) {}
             aref_ts() = default; // default for serialization conv
             // implement ipoint_ts contract:
             virtual ts_point_fx point_interpretation() const {return rep.point_interpretation();}
@@ -541,7 +577,7 @@ namespace shyft {
          *            b  = timeshift_ts(a, dt)
          *
          * \note If the ts given at constructor time is an unbound ts or expression,
-         *       then .do_deferred_bind() needs to be called before any call to
+         *       then .do_bind() needs to be called before any call to
          *       value or time-axis function calls.
          *
          */
@@ -556,20 +592,20 @@ namespace shyft {
             time_shift_ts(const apoint_ts& ats,utctimespan adt)
                 :ts(ats.ts),dt(adt) {
                 if(!ts->needs_bind())
-                    do_deferred_bind();
+                    local_do_bind();
 
             }
             time_shift_ts(apoint_ts&& ats, utctimespan adt)
                 :ts(std::move(ats.ts)),dt(adt) {
                 if(!ts->needs_bind())
-                    do_deferred_bind();
+					local_do_bind();
             }
             time_shift_ts(const std::shared_ptr<ipoint_ts> &ts, utctime adt )
                 :ts(ts),dt(adt){
                 if(!ts->needs_bind())
-                    do_deferred_bind();
+					local_do_bind();
             }
-            void do_deferred_bind() {
+            void local_do_bind() {
                 if(ta.size()==0) {//TODO: introduce bound flag, and use that, using the ta.size() is a problem if ta *is* size 0.
                     ta= time_axis::time_shift(ts->time_axis(),dt);
                 }
@@ -586,7 +622,62 @@ namespace shyft {
             virtual double value_at(utctime t) const {return ts->value_at(t-dt);}
             virtual std::vector<double> values() const {return ts->values();}
             virtual bool needs_bind() const { return ts->needs_bind();}
-            virtual void do_bind() {ts->do_bind();do_deferred_bind();}
+            virtual void do_bind() {ts->do_bind();local_do_bind();}
+            x_serialize_decl();
+
+        };
+
+        /** \brief abs_ts as  abs(ts)
+        *
+        * The time-axis as source, values are abs of source
+        *
+        *
+        */
+        struct abs_ts :ipoint_ts {
+            std::shared_ptr<ipoint_ts> ts;
+            gta_t ta;
+
+            abs_ts() = default;
+
+            //-- useful ct goes here
+            explicit abs_ts(const apoint_ts& ats)
+                :ts(ats.ts) {
+                if (!ts->needs_bind())
+					local_do_bind();
+
+            }
+            explicit abs_ts(apoint_ts&& ats)
+                :ts(std::move(ats.ts)){
+                if (!ts->needs_bind())
+					local_do_bind();
+            }
+            explicit abs_ts(const std::shared_ptr<ipoint_ts> &ts)
+                :ts(ts) {
+                if (!ts->needs_bind())
+					local_do_bind();
+            }
+            void local_do_bind() {
+                if (ta.size() == 0) {//TODO: introduce bound flag, and use that, using the ta.size() is a problem if ta *is* size 0.
+                    ta = ts->time_axis();
+                }
+            }
+            // implement ipoint_ts contract:
+            virtual ts_point_fx point_interpretation() const { return ts->point_interpretation(); }
+            virtual void set_point_interpretation(ts_point_fx point_interpretation) { ts->set_point_interpretation(point_interpretation); }
+            virtual const gta_t& time_axis() const { return ta; }
+            virtual utcperiod total_period() const { return ta.total_period(); }
+            virtual size_t index_of(utctime t) const { return ts->index_of(t); }
+            virtual size_t size() const { return ta.size(); }
+            virtual utctime time(size_t i) const { return ta.time(i); };
+            virtual double value(size_t i) const { return abs(ts->value(i)); }
+            virtual double value_at(utctime t) const { return abs(ts->value_at(t)); }
+            virtual std::vector<double> values() const {
+                auto vv=ts->values();
+                for (auto &v : vv) v = abs(v);
+                return vv;
+            }
+            virtual bool needs_bind() const { return ts->needs_bind(); }
+            virtual void do_bind() { ts->do_bind(); local_do_bind(); }
             x_serialize_decl();
 
         };
@@ -663,10 +754,158 @@ namespace shyft {
                     r.push_back(ts_impl.value(i));
                 return r;
             }
-            virtual bool needs_bind() const { return ts_impl.ts.needs_bind();}
-            virtual void do_bind() {ts_impl.ts.do_bind();}
+            virtual bool needs_bind() const { return ts_impl.needs_bind();}
+            virtual void do_bind() {ts_impl.do_bind();}
             x_serialize_decl();
         };
+
+        /** \brief Extend for ts.extend(ts).
+         */
+        struct extend_ts : ipoint_ts {
+
+            apoint_ts lhs;
+            apoint_ts rhs;
+            extend_ts_split_policy ets_split_p = EPS_LHS_LAST;
+            utctime split_at;
+            extend_ts_fill_policy ets_fill_p = EPF_NAN;
+            double fill_value;
+
+            gta_t ta;
+            ts_point_fx fx_policy = POINT_AVERAGE_VALUE;  // how f(t) are mapped to t
+
+            bool bound = false;
+
+            ts_point_fx point_interpretation() const {
+                return fx_policy;
+            }
+
+            void set_point_interpretation(ts_point_fx x) {
+                fx_policy = x;
+            }
+
+            void local_do_bind() {
+                if (!bound) {
+                    fx_policy = result_policy(lhs.point_interpretation(), rhs.point_interpretation());
+                    ta = time_axis::extend(lhs.time_axis(), rhs.time_axis(), get_split_at());
+                    bound = true;
+                }
+            }
+
+            extend_ts() = default;
+            extend_ts(
+                const apoint_ts & lhs, const apoint_ts & rhs,
+                extend_ts_split_policy split_policy, extend_ts_fill_policy fill_policy,
+                utctime split_at, double fill_value
+            )
+                : lhs( lhs ), rhs( rhs ),
+                  ets_split_p(split_policy ), split_at( split_at ),
+                  ets_fill_p(fill_policy ), fill_value( fill_value ) {
+                if (!needs_bind())
+					local_do_bind();
+            }
+
+            utctime get_split_at() const {
+                switch ( this->ets_split_p ) {
+                default:
+                case EPS_LHS_LAST:  return this->lhs.total_period().end;
+                case EPS_RHS_FIRST: return this->rhs.total_period().start;
+                case EPS_VALUE:     return this->split_at;
+                }
+            }
+
+            void bind_check() const {
+                if (!bound)
+                    throw runtime_error("attempting to use unbound timeseries, context abin_op_ts");
+            }
+            virtual utcperiod total_period() const {
+                return time_axis().total_period();
+            }
+            const gta_t& time_axis() const {
+                bind_check();
+                return ta;
+            };// combine lhs,rhs
+
+            size_t index_of(utctime t) const {
+                return time_axis().index_of(t);
+            };
+
+            size_t size() const {
+                return time_axis().size();
+            };// use the combined ta.size();
+
+            utctime time(size_t i) const {
+                return time_axis().time(i);
+            }; // return combined ta.time(i)
+
+            /** Get ta value at time. */
+            double value_at(utctime t) const;
+
+            /** Get ts value at point no. */
+            double value(size_t i) const;
+
+            /** Collect all values for the extended ts. */
+            std::vector<double> values() const;
+
+            bool needs_bind() const {
+                return lhs.needs_bind() || rhs.needs_bind();
+            }
+            virtual void do_bind() {
+                lhs.do_bind();
+                rhs.do_bind();
+				local_do_bind();
+            }
+
+            x_serialize_decl();
+
+        };
+
+		struct rating_curve_ts : ipoint_ts {
+
+			using rct_t = shyft::time_series::rating_curve_ts<apoint_ts>;
+			using rc_param_t = shyft::time_series::rating_curve_parameters;
+
+			rct_t ts;
+
+			rating_curve_ts() = default;
+			rating_curve_ts(apoint_ts && ts, rc_param_t && rcp)
+				: ts{ std::forward<apoint_ts>(ts), std::forward<rc_param_t>(rcp) } { }
+			rating_curve_ts(const apoint_ts & ts, const rc_param_t & rcp)
+				: ts{ ts, rcp } { }
+			// -----
+			virtual ~rating_curve_ts() = default;
+			// -----
+			rating_curve_ts(const rating_curve_ts &) = default;
+			rating_curve_ts & operator= (const rating_curve_ts &) = default;
+			// -----
+			rating_curve_ts(rating_curve_ts &&) = default;
+			rating_curve_ts & operator= (rating_curve_ts &&) = default;
+
+			virtual bool needs_bind() const { return ts.needs_bind(); }
+			virtual void do_bind() { ts.do_bind(); }
+			// -----
+			virtual ts_point_fx point_interpretation() const { return ts.point_interpretation(); }
+			virtual void set_point_interpretation(ts_point_fx policy) { return ts.set_point_interpretation(policy); }
+			// -----
+			virtual std::size_t size() const { return ts.size(); }
+			virtual utcperiod total_period() const { return ts.total_period(); }
+			virtual const gta_t & time_axis() const { return ts.time_axis(); }
+			// -----
+			virtual std::size_t index_of(utctime t) const { return ts.index_of(t); }
+			virtual double value_at(utctime t) const { return ts(t); }
+			// -----
+			virtual utctime time(std::size_t i) const { return ts.time(i); }
+			virtual double value(std::size_t i) const { return ts.value(i); }
+			// -----
+			virtual std::vector<double> values() const {
+				std::size_t dim = size();
+				std::vector<double> ret; ret.reserve(dim);
+				for ( std::size_t i = 0u; i < dim; ++i ) { ret.emplace_back(value(i)); }
+				return ret;
+			}
+
+			x_serialize_decl();
+
+		};
 
         /** The iop_t represent the basic 'binary' operation,
          *   a stateless function that takes two doubles and returns the binary operation.
@@ -677,7 +916,7 @@ namespace shyft {
             OP_NONE,OP_ADD,OP_SUB,OP_DIV,OP_MUL,OP_MIN,OP_MAX
         };
 
-        /** deferred_bind helps to defer the computation cost of the
+        /** do_bind helps to defer the computation cost of the
          * expression bin-op variants until its actually used.
          * this is also needed when having ts_refs| unbound symbolic time-series references
          * that we would like to serialize and pass over to another server for execution.
@@ -685,7 +924,7 @@ namespace shyft {
          * By inspecting the time-series in the construction phase (bin_op etc.)
          * we try to take the preparation for computation as early as possible,
          * so, only when there is a symbolic time-series reference, there will be
-         * a deferred_bind() that will take action *after* the
+         * a do_bind() that will take action *after* the
          * symbolic time-series has been prepared with real values (bound).
          *
          */
@@ -708,42 +947,42 @@ namespace shyft {
          */
         struct abin_op_ts:ipoint_ts {
 
-              apoint_ts lhs;
-              iop_t op=iop_t::OP_NONE;
-              apoint_ts rhs;
-              gta_t ta;
-              ts_point_fx fx_policy=POINT_AVERAGE_VALUE;
-              bool bound=false;
+            apoint_ts lhs;
+            iop_t op=iop_t::OP_NONE;
+            apoint_ts rhs;
+            gta_t ta;
+            ts_point_fx fx_policy=POINT_AVERAGE_VALUE;
+            bool bound=false;
 
-              ts_point_fx point_interpretation() const {return fx_policy;}
-              void set_point_interpretation(ts_point_fx x) {fx_policy=x;}
+            ts_point_fx point_interpretation() const {return fx_policy;}
+            void set_point_interpretation(ts_point_fx x) {fx_policy=x;}
 
-              void do_deferred_bind() {
+            void local_do_bind() {
                 if(!bound) {
                     fx_policy=result_policy(lhs.point_interpretation(),rhs.point_interpretation());
                     ta=time_axis::combine(lhs.time_axis(),rhs.time_axis());
                     bound=true;
                 }
-              }
+            }
 
-              abin_op_ts()=default;
-              abin_op_ts(const apoint_ts &lhs,iop_t op,const apoint_ts& rhs)
-              :lhs(lhs),op(op),rhs(rhs) {
-                  if( !needs_bind() )
-                     do_deferred_bind();
-              }
-              void bind_check() const {if(!bound) throw runtime_error("attempting to use unbound timeseries, context abin_op_ts");}
-              virtual utcperiod total_period() const {return time_axis().total_period();}
-              const gta_t& time_axis() const {bind_check(); return ta;};// combine lhs,rhs
-              size_t index_of(utctime t) const{return time_axis().index_of(t);};
-              size_t size() const {return time_axis().size();};// use the combined ta.size();
-              utctime time( size_t i) const {return time_axis().time(i);}; // return combined ta.time(i)
-              double value_at(utctime t) const ;
-              double value(size_t i) const;// return op( lhs(t), rhs(t)) ..
-              std::vector<double> values() const;
-              bool needs_bind() const {return lhs.needs_bind() || rhs.needs_bind(); }
-              virtual void do_bind() {lhs.do_bind();rhs.do_bind();do_deferred_bind();}
-              x_serialize_decl();
+            abin_op_ts()=default;
+            abin_op_ts(const apoint_ts &lhs,iop_t op,const apoint_ts& rhs)
+                :lhs(lhs),op(op),rhs(rhs) {
+                if( !needs_bind() )
+					local_do_bind();
+            }
+            void bind_check() const {if(!bound) throw runtime_error("attempting to use unbound timeseries, context abin_op_ts");}
+            virtual utcperiod total_period() const {return time_axis().total_period();}
+            const gta_t& time_axis() const {bind_check(); return ta;};// combine lhs,rhs
+            size_t index_of(utctime t) const{return time_axis().index_of(t);};
+            size_t size() const {return time_axis().size();};// use the combined ta.size();
+            utctime time( size_t i) const {return time_axis().time(i);}; // return combined ta.time(i)
+            double value_at(utctime t) const ;
+            double value(size_t i) const;// return op( lhs(t), rhs(t)) ..
+            std::vector<double> values() const;
+            bool needs_bind() const {return lhs.needs_bind() || rhs.needs_bind(); }
+            virtual void do_bind() {lhs.do_bind();rhs.do_bind();local_do_bind();}
+            x_serialize_decl();
 
         };
 
@@ -764,7 +1003,7 @@ namespace shyft {
               ts_point_fx point_interpretation() const {return fx_policy;}
               void set_point_interpretation(ts_point_fx x) {fx_policy=x;}
 
-              void do_deferred_bind()  {
+              void local_do_bind()  {
                   if(!bound) {
                       ta=rhs.time_axis();
                       fx_policy= rhs.point_interpretation();
@@ -777,7 +1016,7 @@ namespace shyft {
               abin_op_scalar_ts(double lhs,iop_t op,const apoint_ts& rhs)
               :lhs(lhs),op(op),rhs(rhs) {
                   if(!needs_bind())
-                    do_deferred_bind();
+					  local_do_bind();
               }
 
               virtual utcperiod total_period() const {return time_axis().total_period();}
@@ -789,7 +1028,7 @@ namespace shyft {
               double value(size_t i) const ;
               std::vector<double> values() const ;
               bool needs_bind() const {return rhs.needs_bind(); }
-              virtual void do_bind() {rhs.do_bind();do_deferred_bind();}
+              virtual void do_bind() {rhs.do_bind();local_do_bind();}
               x_serialize_decl();
         };
 
@@ -806,7 +1045,7 @@ namespace shyft {
               ts_point_fx fx_policy=POINT_AVERAGE_VALUE;
               ts_point_fx point_interpretation() const {return fx_policy;}
               void set_point_interpretation(ts_point_fx x) {fx_policy=x;}
-              void do_deferred_bind()  {
+              void local_do_bind()  {
                   if(!bound) {
                       ta=lhs.time_axis();
                       fx_policy= lhs.point_interpretation();
@@ -819,7 +1058,7 @@ namespace shyft {
               abin_op_ts_scalar(const apoint_ts &lhs,iop_t op,double rhs)
               :lhs(lhs),op(op),rhs(rhs) {
                   if(!needs_bind())
-                    do_deferred_bind();
+					  local_do_bind();
               }
 
               virtual utcperiod total_period() const {return time_axis().total_period();}
@@ -831,7 +1070,7 @@ namespace shyft {
               double value(size_t i) const;
               std::vector<double> values() const;
               bool needs_bind() const {return lhs.needs_bind(); }
-              virtual void do_bind() {lhs.do_bind();do_deferred_bind();}
+              virtual void do_bind() {lhs.do_bind();local_do_bind();}
               x_serialize_decl();
 
         };
@@ -887,6 +1126,11 @@ namespace shyft {
         ///< time_shift i.e. same ts values, but time-axis is time-axis + dt
         apoint_ts time_shift(const apoint_ts &ts, utctimespan dt);
 
+        apoint_ts extend(
+            const apoint_ts & lhs_ts, const apoint_ts & rhs_ts,
+            extend_ts_split_policy split_policy, extend_ts_fill_policy fill_policy,
+            utctime split_at, double fill_value );
+
         /** Given a vector of expressions, deflate(evaluate) the expressions and return the
          * equivalent concrete point-time-series of the expressions in the
          * preferred destination type Ts
@@ -925,9 +1169,9 @@ namespace shyft {
             // constructor stuff that needs to be complete for boost::python
             ats_vector()=default;
             ats_vector(ats_vec const&c):ats_vec(c) {}
-            ats_vector(ats_vec&& c):ats_vec(c) {}
+            ats_vector(ats_vec&& c):ats_vec(std::move(c)) {}
             ats_vector(ats_vector const&c):ats_vec(c) {}
-            ats_vector(size_t sz):ats_vec(sz) {}
+            explicit ats_vector(size_t sz):ats_vec(sz) {}
             ats_vector(ats_vector&&c):ats_vec(move(c)) {}
             ats_vector& operator=(ats_vector const&c) {
                 if(this !=&c) {
@@ -972,6 +1216,34 @@ namespace shyft {
                 }
             }
 
+            ats_vector extend_ts(
+                apoint_ts const & ta,
+                extend_ts_split_policy split_policy, extend_ts_fill_policy fill_policy,
+                utctime split_at, double fill_value
+            ) const {
+                ats_vector r; r.reserve(this->size());
+                for ( auto const & ts : *this )
+                    r.push_back(ts.extend(ta, split_policy, fill_policy, split_at, fill_value));
+                return r;
+            }
+            ats_vector extend_vec(
+                ats_vector const & ts_vec,
+                extend_ts_split_policy split_policy, extend_ts_fill_policy fill_policy,
+                utctime split_at, double fill_value
+            ) const {
+                if ( this->size() != ts_vec.size() ) throw std::runtime_error("vector size mismatch, must be of the same size");
+                ats_vector r; r.reserve(this->size());
+                auto lhs_it = this->cbegin(); auto rhs_it = ts_vec.cbegin();
+                while ( lhs_it != this->cend() ) {
+                    r.push_back(lhs_it->extend(*rhs_it, split_policy, fill_policy, split_at, fill_value));
+                    lhs_it++; rhs_it++;
+                }
+                return r;
+            }
+
+            ats_vector abs() const {
+                ats_vector r; r.reserve(size()); for (auto const &ts : *this) r.push_back(ts.abs()); return r;
+            }
             ats_vector average(gta_t const&ta) const {
                 ats_vector r;r.reserve(size());for(auto const &ts:*this) r.push_back(ts.average(ta)); return r;
             }
@@ -1005,7 +1277,7 @@ namespace shyft {
             x_serialize_decl();
         };
         // quantile-mapping
-        ats_vector quantile_map_forecast(vector<ats_vector> const & forecast_set,vector<double> const& set_weights,ats_vector const& historical_data,gta_t const&time_axis,utctime interpolation_start, utctime interpolation_end=no_utctime);
+        ats_vector quantile_map_forecast(vector<ats_vector> const & forecast_set,vector<double> const& set_weights,ats_vector const& historical_data,gta_t const&time_axis,utctime interpolation_start, utctime interpolation_end=no_utctime, bool interpolated_quantiles=false);
         // multiply operators
         ats_vector operator*(ats_vector const &a,double b);
         ats_vector operator*(double a,ats_vector const &b);
@@ -1069,11 +1341,15 @@ x_serialize_export_key(shyft::api::integral_ts);
 x_serialize_export_key(shyft::api::accumulate_ts);
 x_serialize_export_key(shyft::api::time_shift_ts);
 x_serialize_export_key(shyft::api::periodic_ts);
+x_serialize_export_key(shyft::api::extend_ts);
 x_serialize_export_key(shyft::api::abin_op_scalar_ts);
 x_serialize_export_key(shyft::api::abin_op_ts);
 x_serialize_export_key(shyft::api::abin_op_ts_scalar);
 x_serialize_export_key(shyft::api::aref_ts);
 x_serialize_export_key(shyft::time_series::convolve_w_ts<shyft::api::apoint_ts>); // oops need this from core
 x_serialize_export_key(shyft::api::convolve_w_ts);
+x_serialize_export_key(shyft::time_series::rating_curve_ts<shyft::api::apoint_ts>);
+x_serialize_export_key(shyft::api::rating_curve_ts);
 x_serialize_export_key(shyft::api::apoint_ts);
 x_serialize_export_key(shyft::api::ats_vector);
+x_serialize_export_key(shyft::api::abs_ts);
