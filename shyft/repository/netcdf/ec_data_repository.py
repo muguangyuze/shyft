@@ -2,13 +2,16 @@
 from __future__ import print_function
 from builtins import range
 import numpy as np
+import re
+from glob import glob
 from os import path
 from pyproj import Proj
 from pyproj import transform
 from shyft import api
-from shyft.repository.netcdf import AromeDataRepository, AromeDataRepositoryError
+from .. import interfaces
 from netCDF4 import Dataset
 from shyft.repository.netcdf.time_conversion import convert_netcdf_time
+
 
 UTC = api.Calendar()
 
@@ -17,7 +20,7 @@ class EcDataRepositoryError(Exception):
     pass
 
 
-class EcDataRepository(AromeDataRepository):
+class EcDataRepository(interfaces.GeoTsRepository):
     """
     Repository for geo located timeseries given as Arome(*) data in
     netCDF files.
@@ -108,19 +111,25 @@ class EcDataRepository(AromeDataRepository):
             instead of raising exception.
         """
         #directory = directory.replace('${SHYFTDATA}', os.getenv('SHYFTDATA', '.'))
-        super(EcDataRepository, self).__init__(epsg, directory, filename, bounding_box,
-                                                  x_padding, y_padding, elevation_file, allow_subset)
+        #super(EcDataRepository, self).__init__(epsg, directory, filename, bounding_box,
+        #                                          x_padding, y_padding, elevation_file, allow_subset)
+        #directory = directory.replace('${SHYFTDATA}', os.getenv('SHYFTDATA', '.'))
+        directory = path.expandvars(directory)
+        self._filename = path.join(directory, filename)
+        self.allow_subset = allow_subset
 
         full_filepath = path.join(directory, filename)
-        print(filename)
-        with Dataset(full_filepath) as dataset:
-            data_cs = dataset.variables.get("projection_regular_ll", None)
-            self.data_cs = data_cs.proj4
+        # print(filename)
+        # with Dataset(full_filepath) as dataset:
+        #     data_cs = dataset.variables.get("projection_regular_ll", None)
+        #     self.data_cs = data_cs.proj4
         # Field names and mappings
         # Field names and mappings netcdf_name: shyft_name
         self.selection_criteria = selection_criteria
         self.nb_fc_to_drop = nb_fc_to_drop
-        self.padding = x_padding
+        self.shyft_cs = "+init=EPSG:{}".format(epsg)
+        self._x_padding = x_padding
+        self._y_padding = y_padding
         self._arome_shyft_map = {'dew_point_temperature_2m': 'dew_point_temperature_2m',
                                  'surface_air_pressure': 'surface_air_pressure',
                                  #"relative_humidity_2m": "relative_humidity",
@@ -154,12 +163,33 @@ class EcDataRepository(AromeDataRepository):
                             "radiation": api.POINT_AVERAGE_VALUE,
                             "wind_speed": api.POINT_INSTANT_VALUE}
 
-    def get_whole_forecast_ensemble(self, input_source_types, geo_location_criteria=None):
+    @property
+    def bounding_box(self):
+        # Add a padding to the bounding box to make sure the computational
+        # domain is fully enclosed in arome dataset
+        if self._bounding_box is None:
+            raise EcDataRepositoryError("A bounding box must be provided.")
+        bounding_box = np.array(self._bounding_box)
+        bounding_box[0][0] -= self._x_padding
+        bounding_box[0][1] += self._x_padding
+        bounding_box[0][2] += self._x_padding
+        bounding_box[0][3] -= self._x_padding
+        bounding_box[1][0] -= self._y_padding
+        bounding_box[1][1] -= self._y_padding
+        bounding_box[1][2] += self._y_padding
+        bounding_box[1][3] += self._y_padding
+        return bounding_box
+
+    def get_forecast_ensemble(self, input_source_types, t_c, utc_period=None, geo_location_criteria = None):
         """
         Parameters
         ----------
         input_source_types: list
             List of source types to retrieve (precipitation, temperature, ...)
+        utc_period: api.UtcPeriod
+            The utc time period that should (as a minimum) be covered.
+        t_c: long
+            Forecast specification; return newest forecast older than t_c.
         geo_location_criteria: object
             Some type (to be decided), extent (bbox + coord.ref).
 
@@ -170,14 +200,15 @@ class EcDataRepository(AromeDataRepository):
             being api vectors of geo located timeseries.
         """
 
-        filename = self._filename
+        #filename = self._filename
+        filename = self._get_files(t_c, "_(\d{8})([T_])(\d{2})(Z)?.nc$")
         with Dataset(filename) as dataset:
-            time = dataset.variables.get("time", None)
-            conv_time = convert_netcdf_time(time.units, time)
-            start_t = conv_time[0]
-            last_t = conv_time[-1]
-            res = []
-            utc_period = api.UtcPeriod(int(start_t), int(last_t))
+            if utc_period is None:
+                time = dataset.variables.get("time", None)
+                conv_time = convert_netcdf_time(time.units, time)
+                start_t = conv_time[0]
+                last_t = conv_time[-1]
+                utc_period = api.UtcPeriod(int(start_t), int(last_t))
             # for idx in range(dataset.dimensions["ensemble_member"].size):
             res = self._get_data_from_dataset(dataset, input_source_types, utc_period,
                                               geo_location_criteria,
@@ -442,12 +473,12 @@ class EcDataRepository(AromeDataRepository):
         y_lower = y <= y_max
         if sum(x_upper == x_lower) < 2:
             if sum(x_lower) == 0 and sum(x_upper) == len(x_upper):
-                raise AromeDataRepositoryError("Bounding box longitudes don't intersect with dataset.")
+                raise EcDataRepositoryError("Bounding box longitudes don't intersect with dataset.")
             x_upper[np.argmax(x_upper) - 1] = True
             x_lower[np.argmin(x_lower)] = True
         if sum(y_upper == y_lower) < 2:
             if sum(y_lower) == 0 and sum(y_upper) == len(y_upper):
-                raise AromeDataRepositoryError("Bounding box latitudes don't intersect with dataset.")
+                raise EcDataRepositoryError("Bounding box latitudes don't intersect with dataset.")
             y_upper[np.argmax(y_upper) - 1] = True
             y_lower[np.argmin(y_lower)] = True
 
@@ -549,6 +580,29 @@ class EcDataRepository(AromeDataRepository):
             time_series[key] = np.array([[construct(data[fslice + [i, j]])
                                           for j in range(J)] for i in range(I)])
         return time_series
+
+    def _get_files(self, t_c, date_pattern):
+        utc = api.Calendar()
+        file_names = glob(self._filename)
+        match_files = []
+        match_times = []
+        for fn in file_names:
+            match = re.search(date_pattern, fn)
+            if match:
+                datestr, _ , hourstr, _ = match.groups()
+                year, month, day = int(datestr[:4]), int(datestr[4:6]), int(datestr[6:8])
+                hour = int(hourstr)
+                t = utc.time(api.YMDhms(year, month, day, hour))
+                if t <= t_c:
+                    match_files.append(fn)
+                    match_times.append(t)
+        if match_files:
+            return match_files[np.argsort(match_times)[-1]]
+        ymds = utc.calendar_units(t_c)
+        date = "{:4d}.{:02d}.{:02d}:{:02d}:{:02d}:{:02d}".format(ymds.year, ymds.month, ymds.day,
+                                                                 ymds.hour, ymds.minute, ymds.second)
+        raise EcDataRepositoryError("No matches found for file_pattern = {} and t_c = {} "
+                                       "".format(self._filename, date))
 
     @classmethod
     def calc_q(cls, T, p, alpha):
