@@ -74,8 +74,8 @@ class EcDataRepository(interfaces.GeoTsRepository):
     __T0=273.16 # K
     __Tice=205.16 # K
 
-    def __init__(self, epsg, directory, filename=None, bounding_box=None, nb_fc_to_drop=0,
-                 x_padding=10000.0, y_padding=10000.0, elevation_file=None, allow_subset=False, selection_criteria='bbox'): # TODO: padding
+    def __init__(self, epsg, directory, filename=None, bounding_box=None,
+                 x_padding=10000.0, y_padding=10000.0, elevation_file=None, allow_subset=False): # TODO: padding
         """
         Construct the netCDF4 dataset reader for data from Arome NWP model,
         and initialize data retrieval.
@@ -111,25 +111,27 @@ class EcDataRepository(interfaces.GeoTsRepository):
             instead of raising exception.
         """
         #directory = directory.replace('${SHYFTDATA}', os.getenv('SHYFTDATA', '.'))
-        #super(EcDataRepository, self).__init__(epsg, directory, filename, bounding_box,
-        #                                          x_padding, y_padding, elevation_file, allow_subset)
-        #directory = directory.replace('${SHYFTDATA}', os.getenv('SHYFTDATA', '.'))
         directory = path.expandvars(directory)
         self._filename = path.join(directory, filename)
         self.allow_subset = allow_subset
 
-        full_filepath = path.join(directory, filename)
-        # print(filename)
-        # with Dataset(full_filepath) as dataset:
-        #     data_cs = dataset.variables.get("projection_regular_ll", None)
-        #     self.data_cs = data_cs.proj4
-        # Field names and mappings
-        # Field names and mappings netcdf_name: shyft_name
-        self.selection_criteria = selection_criteria
-        self.nb_fc_to_drop = nb_fc_to_drop
+        if not path.isdir(directory):
+            raise EcDataRepositoryError("No such directory '{}'".format(directory))
+
+        if elevation_file is not None:
+            self.elevation_file = path.join(directory, elevation_file)
+            if not path.isfile(self.elevation_file):
+                raise EcDataRepositoryError(
+                    "Elevation file '{}' not found".format(self.elevation_file))
+        else:
+            self.elevation_file = None
+
         self.shyft_cs = "+init=EPSG:{}".format(epsg)
         self._x_padding = x_padding
         self._y_padding = y_padding
+        self._bounding_box = bounding_box
+
+        # Field names and mappings
         self._arome_shyft_map = {'dew_point_temperature_2m': 'dew_point_temperature_2m',
                                  'surface_air_pressure': 'surface_air_pressure',
                                  #"relative_humidity_2m": "relative_humidity",
@@ -180,7 +182,7 @@ class EcDataRepository(interfaces.GeoTsRepository):
         bounding_box[1][3] += self._y_padding
         return bounding_box
 
-    def get_forecast_ensemble(self, input_source_types, t_c, utc_period=None, geo_location_criteria = None):
+    def get_forecast_ensemble(self, input_source_types, utc_period, t_c, geo_location_criteria=None):
         """
         Parameters
         ----------
@@ -215,7 +217,7 @@ class EcDataRepository(interfaces.GeoTsRepository):
                                               ensemble_member='all')
             return res
 
-    def get_whole_forecast(self, input_source_types, geo_location_criteria=None):
+    def get_forecast(self, input_source_types, utc_period, t_c, geo_location_criteria=None):
         """Get shyft source vectors of time series for input_source_types
 
         Parameters
@@ -231,85 +233,87 @@ class EcDataRepository(interfaces.GeoTsRepository):
             dictionary keyed by time series name, where values are api vectors of geo
             located timeseries.
         """
-        filename = self._filename
+        # filename = self._filename
+        filename = self._get_files(t_c, "_(\d{8})([T_])(\d{2})(Z)?.nc$")
         with Dataset(filename) as dataset:
-            time = dataset.variables.get("time", None)
-            conv_time = convert_netcdf_time(time.units, time)
-            start_t = conv_time[0]
-            last_t = conv_time[-1]
+            if utc_period is None:
+                time = dataset.variables.get("time", None)
+                conv_time = convert_netcdf_time(time.units, time)
+                start_t = conv_time[0]
+                last_t = conv_time[-1]
+                utc_period = api.UtcPeriod(int(start_t), int(last_t))
 
-            utc = api.Calendar()
             utc_period = api.UtcPeriod(int(start_t), int(last_t))
             return self._get_data_from_dataset(dataset, input_source_types,
                                                utc_period, geo_location_criteria)
 
-    def _make_time_slice(self, time, lead_time, lead_times_in_sec, fc_selection_criteria_v, concat):
-        v = fc_selection_criteria_v
-        nb_extra_intervals = 0
-        if concat: # make continuous timeseries
-            self.fc_len_to_concat = self.nb_fc_interval_to_concat * self.fc_interval
-            utc_period = v  # TODO: verify that fc_selection_criteria_v is of type api.UtcPeriod
-            time_after_drop = time + lead_times_in_sec[self.nb_fc_to_drop]
-            # idx_min = np.searchsorted(time, utc_period.start, side='left')
-            idx_min = np.argmin(time_after_drop <= utc_period.start) - 1  # raise error if result is -1
-            #idx_max = np.searchsorted(time, utc_period.end, side='right')
-            idx_max = np.argmax(time_after_drop >= utc_period.end)  # raise error if result is 0
-            if idx_min<0:
-                first_lead_time_of_last_fc = int(time_after_drop[-1])
-                if first_lead_time_of_last_fc <= utc_period.start:
-                    idx_min = len(time)-1
-                else:
-                    raise EcDataRepositoryError(
-                        "The earliest time in repository ({}) is later than the start of the period for which data is "
-                        "requested ({})".format(UTC.to_string(int(time_after_drop[0])), UTC.to_string(utc_period.start)))
-            if idx_max == 0:
-                last_lead_time_of_last_fc = int(time[-1] + lead_times_in_sec[-1])
-                if last_lead_time_of_last_fc < utc_period.end:
-                    raise EcDataRepositoryError(
-                        "The latest time in repository ({}) is earlier than the end of the period for which data is "
-                        "requested ({})".format(UTC.to_string(last_lead_time_of_last_fc), UTC.to_string(utc_period.end)))
-                else:
-                    idx_max = len(time)-1
-
-            #issubset = True if idx_max < len(time) - 1 else False # For a concat repo 'issubset' is related to the lead_time axis and not the main time axis
-            issubset = True if self.nb_fc_to_drop + self.fc_len_to_concat < len(lead_time)-1 else False
-            time_slice = slice(idx_min, idx_max+1)
-            last_time = int(time[idx_max]+lead_times_in_sec[self.nb_fc_to_drop + self.fc_len_to_concat - 1])
-            if utc_period.end > last_time:
-                nb_extra_intervals = int(0.5+(utc_period.end-last_time)/(self.fc_len_to_concat*self.fc_time_res))
-        else:
-            #self.fc_len_to_concat = len(lead_time)  # Take all lead_times for now
-            #self.nb_fc_to_drop = 0  # Take all lead_times for now
-            self.fc_len_to_concat = len(lead_time) - self.nb_fc_to_drop
-            if isinstance(v, api.UtcPeriod):
-                time_slice = ((time >= v.start) & (time <= v.end))
-                if not any(time_slice):
-                    raise EcDataRepositoryError(
-                        "No forecasts found with start time within period {}.".format(v.to_string()))
-            elif isinstance(v, list):
-                raise EcDataRepositoryError(
-                        "'forecasts_at_reference_times' selection criteria not supported yet.")
-            elif isinstance(v, dict):  # get the latest forecasts
-                t = v['forecasts_older_than']
-                n = v['number of forecasts']
-                idx = np.argmin(time <= t) - 1
-                if idx < 0:
-                    first_lead_time_of_last_fc = int(time[-1])
-                    if first_lead_time_of_last_fc < t:
-                        idx = len(time) - 1
-                    else:
-                        raise EcDataRepositoryError(
-                            "The earliest time in repository ({}) is later than or at the start of the period for which data is "
-                            "requested ({})".format(UTC.to_string(int(time[0])), UTC.to_string(t)))
-                if idx+1 < n:
-                    raise EcDataRepositoryError(
-                        "The number of forecasts available in repo ({}) and earlier than the parameter "
-                        "'forecasts_older_than' ({}) is less than the number of forecasts requested ({})".format(
-                            idx+1, UTC.to_string(t), n))
-                time_slice = slice(idx-n+1, idx+1)
-            issubset = False  # Since we take all the lead_times for now
-        lead_time_slice = slice(self.nb_fc_to_drop, self.nb_fc_to_drop + self.fc_len_to_concat)
-        return time_slice, lead_time_slice, issubset, self.fc_len_to_concat, nb_extra_intervals
+    # def _make_time_slice(self, time, lead_time, lead_times_in_sec, fc_selection_criteria_v, concat):
+    #     v = fc_selection_criteria_v
+    #     nb_extra_intervals = 0
+    #     if concat: # make continuous timeseries
+    #         self.fc_len_to_concat = self.nb_fc_interval_to_concat * self.fc_interval
+    #         utc_period = v  # TODO: verify that fc_selection_criteria_v is of type api.UtcPeriod
+    #         time_after_drop = time + lead_times_in_sec[self.nb_fc_to_drop]
+    #         # idx_min = np.searchsorted(time, utc_period.start, side='left')
+    #         idx_min = np.argmin(time_after_drop <= utc_period.start) - 1  # raise error if result is -1
+    #         #idx_max = np.searchsorted(time, utc_period.end, side='right')
+    #         idx_max = np.argmax(time_after_drop >= utc_period.end)  # raise error if result is 0
+    #         if idx_min<0:
+    #             first_lead_time_of_last_fc = int(time_after_drop[-1])
+    #             if first_lead_time_of_last_fc <= utc_period.start:
+    #                 idx_min = len(time)-1
+    #             else:
+    #                 raise EcDataRepositoryError(
+    #                     "The earliest time in repository ({}) is later than the start of the period for which data is "
+    #                     "requested ({})".format(UTC.to_string(int(time_after_drop[0])), UTC.to_string(utc_period.start)))
+    #         if idx_max == 0:
+    #             last_lead_time_of_last_fc = int(time[-1] + lead_times_in_sec[-1])
+    #             if last_lead_time_of_last_fc < utc_period.end:
+    #                 raise EcDataRepositoryError(
+    #                     "The latest time in repository ({}) is earlier than the end of the period for which data is "
+    #                     "requested ({})".format(UTC.to_string(last_lead_time_of_last_fc), UTC.to_string(utc_period.end)))
+    #             else:
+    #                 idx_max = len(time)-1
+    #
+    #         #issubset = True if idx_max < len(time) - 1 else False # For a concat repo 'issubset' is related to the lead_time axis and not the main time axis
+    #         issubset = True if self.nb_fc_to_drop + self.fc_len_to_concat < len(lead_time)-1 else False
+    #         time_slice = slice(idx_min, idx_max+1)
+    #         last_time = int(time[idx_max]+lead_times_in_sec[self.nb_fc_to_drop + self.fc_len_to_concat - 1])
+    #         if utc_period.end > last_time:
+    #             nb_extra_intervals = int(0.5+(utc_period.end-last_time)/(self.fc_len_to_concat*self.fc_time_res))
+    #     else:
+    #         #self.fc_len_to_concat = len(lead_time)  # Take all lead_times for now
+    #         #self.nb_fc_to_drop = 0  # Take all lead_times for now
+    #         self.fc_len_to_concat = len(lead_time) - self.nb_fc_to_drop
+    #         if isinstance(v, api.UtcPeriod):
+    #             time_slice = ((time >= v.start) & (time <= v.end))
+    #             if not any(time_slice):
+    #                 raise EcDataRepositoryError(
+    #                     "No forecasts found with start time within period {}.".format(v.to_string()))
+    #         elif isinstance(v, list):
+    #             raise EcDataRepositoryError(
+    #                     "'forecasts_at_reference_times' selection criteria not supported yet.")
+    #         elif isinstance(v, dict):  # get the latest forecasts
+    #             t = v['forecasts_older_than']
+    #             n = v['number of forecasts']
+    #             idx = np.argmin(time <= t) - 1
+    #             if idx < 0:
+    #                 first_lead_time_of_last_fc = int(time[-1])
+    #                 if first_lead_time_of_last_fc < t:
+    #                     idx = len(time) - 1
+    #                 else:
+    #                     raise EcDataRepositoryError(
+    #                         "The earliest time in repository ({}) is later than or at the start of the period for which data is "
+    #                         "requested ({})".format(UTC.to_string(int(time[0])), UTC.to_string(t)))
+    #             if idx+1 < n:
+    #                 raise EcDataRepositoryError(
+    #                     "The number of forecasts available in repo ({}) and earlier than the parameter "
+    #                     "'forecasts_older_than' ({}) is less than the number of forecasts requested ({})".format(
+    #                         idx+1, UTC.to_string(t), n))
+    #             time_slice = slice(idx-n+1, idx+1)
+    #         issubset = False  # Since we take all the lead_times for now
+    #     lead_time_slice = slice(self.nb_fc_to_drop, self.nb_fc_to_drop + self.fc_len_to_concat)
+    #     return time_slice, lead_time_slice, issubset, self.fc_len_to_concat, nb_extra_intervals
 
     def _get_data_from_dataset(self, dataset, input_source_types, utc_period,
                                geo_location_criteria, ensemble_member=None):
