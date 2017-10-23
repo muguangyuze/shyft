@@ -243,7 +243,6 @@ class EcDataRepository(interfaces.GeoTsRepository):
                 last_t = conv_time[-1]
                 utc_period = api.UtcPeriod(int(start_t), int(last_t))
 
-            utc_period = api.UtcPeriod(int(start_t), int(last_t))
             return self._get_data_from_dataset(dataset, input_source_types,
                                                utc_period, geo_location_criteria)
 
@@ -426,8 +425,8 @@ class EcDataRepository(interfaces.GeoTsRepository):
         y_mask = y_upper == y_lower
 
         # Transform from source coordinates to target coordinates
-#        xx, yy = transform(data_proj, target_proj, *np.meshgrid(x[x_mask], y[y_mask]))
-        xx, yy = np.meshgrid(x[x_mask], y[y_mask])
+        xx, yy = transform(data_proj, target_proj, *np.meshgrid(x[x_mask], y[y_mask]))
+       # xx, yy = np.meshgrid(x[x_mask], y[y_mask])
 
         return xx, yy, (x_mask, y_mask), (x_inds, y_inds)
 
