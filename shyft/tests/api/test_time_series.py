@@ -7,13 +7,13 @@ import unittest
 
 class TimeSeries(unittest.TestCase):
     """Verify and illustrate TimeSeries
-     
+
      a) point time-series:
-        defined by a set of points, 
+        defined by a set of points,
         projection from point to f(t) (does the point represent state in time, or average of a period?)
         projection of f(t) to average/integral ts, like
         ts_avg_1=average_accessor(ts1,time_axis)
-        
+
      """
 
     def setUp(self):
@@ -30,7 +30,7 @@ class TimeSeries(unittest.TestCase):
         dv = np.arange(self.ta.size())
         v = api.DoubleVector.from_numpy(dv)
         # test create
-        tsa = api.TsFixed(self.ta, v)
+        tsa = api.TsFixed(self.ta, v, api.POINT_INSTANT_VALUE)
         # assert its contains time and values as expected.
         self.assertEqual(self.ta.total_period(), tsa.total_period())
         [self.assertAlmostEqual(tsa.value(i), v[i]) for i in range(self.ta.size())]
@@ -70,7 +70,7 @@ class TimeSeries(unittest.TestCase):
         v = api.DoubleVector.from_numpy(dv)
         xv = v.to_numpy()
 
-        tsfixed = api.TsFixed(self.ta, v)
+        tsfixed = api.TsFixed(self.ta, v, api.POINT_INSTANT_VALUE)
         self.assertEqual(tsfixed.size(), self.ta.size())
         self.assertAlmostEqual(tsfixed.get(0).v, v[0])
         vv = tsfixed.values.to_numpy()  # introduced .values for compatibility
@@ -106,7 +106,7 @@ class TimeSeries(unittest.TestCase):
             t.push_back(self.ta(i).start)
         t.push_back(self.ta(self.ta.size() - 1).end)
         ta = api.TimeAxisByPoints(t)
-        tspoint = api.TsPoint(ta, v)
+        tspoint = api.TsPoint(ta, v, api.POINT_INSTANT_VALUE)
         ts_ta = tspoint.time_axis  # a TsPoint do have .time_axis and .values
         self.assertEqual(len(ts_ta), len(self.ta))  # should have same length etc.
 
@@ -170,7 +170,7 @@ class TimeSeries(unittest.TestCase):
         tsf = api.TsFactory()
         ts1 = tsf.create_point_ts(self.ta.size(), self.t, self.d, v)
         ts2 = tsf.create_time_point_ts(self.ta.total_period(), t, v)
-        ts3 = api.TsFixed(tax, v)
+        ts3 = api.TsFixed(tax, v, api.POINT_INSTANT_VALUE)
 
         tst = api.TsTransform()
         tt1 = tst.to_average(t_start, dt, tax.size(), ts1)
@@ -193,7 +193,7 @@ class TimeSeries(unittest.TestCase):
 
         a = api.TimeSeries(ta=ta, fill_value=3.0, point_fx=api.point_interpretation_policy.POINT_AVERAGE_VALUE)
         self.assertTrue(a)  # should evaluate to true
-        b = api.TimeSeries(ta=ta, fill_value=1.0)
+        b = api.TimeSeries(ta=ta, fill_value=1.0,point_fx=api.point_interpretation_policy.POINT_INSTANT_VALUE)
         b.fill(2.0)  # demo how to fill a point ts
         self.assertAlmostEqual((1.0 - b).values.to_numpy().max(), -1.0)
         self.assertAlmostEqual((b - 1.0).values.to_numpy().max(), 1.0)
@@ -285,10 +285,10 @@ class TimeSeries(unittest.TestCase):
         """ the percentiles function now also supports picking out the min-max peak value
             within each interval.
             Setup test-data so that we have a well known percentile result,
-            but also have peak-values within the interval that we can 
+            but also have peak-values within the interval that we can
             verify.
             We let hour ts 0..9 have values 0..9 constant 24*10 days
-               then modify ts[1], every day first  value to a peak min value equal to - day_no*1 
+               then modify ts[1], every day first  value to a peak min value equal to - day_no*1
                                   every day second value to a peak max value equal to + day_no*1
                                   every day 3rd    value to a nan value
             ts[1] should then have same average value for each day (so same percentile)
@@ -590,6 +590,11 @@ class TimeSeries(unittest.TestCase):
         bi[0].ts.bind(a)
         c_resurrected.bind_done()
         self.assertAlmostEqual(c_resurrected.value(10), a.value(10)*2*4.0, 3)
+        # verify we can create a ref.ts with something that resolves to a point ts.
+        bind_expr_ts = api.TimeSeries("some_sym", 3.0*a)  # notice that we can bind with something that is an expression
+        self.assertIsNotNone(bind_expr_ts)
+        self.assertAlmostEqual(bind_expr_ts.value(0), 3.0*a.value(0))  # just to check, its for real
+
 
     def test_a_time_series_vector(self):
         c = api.Calendar()
@@ -864,7 +869,7 @@ class TimeSeries(unittest.TestCase):
         extension = api.TimeSeries(ta=ta, fill_value=8.0, point_fx=api.point_interpretation_policy.POINT_AVERAGE_VALUE)
 
         # extend after all time-series in the vector
-        extended_tsvector = tsvector.extend(extension)
+        extended_tsvector = tsvector.extend_ts(extension)
 
         # assert first element
         for i in range(2*n):
@@ -889,7 +894,7 @@ class TimeSeries(unittest.TestCase):
             fill_value=20.0, point_fx=api.point_interpretation_policy.POINT_AVERAGE_VALUE))
 
         # extend each element in tsvector by the corresponding element in tsvector_2
-        extended_tsvector = tsvector.extend(tsvector_2)
+        extended_tsvector = tsvector.extend_ts(tsvector_2)
 
         # assert first element
         for i in range(2*n):
@@ -907,7 +912,7 @@ class TimeSeries(unittest.TestCase):
         t0 = api.utctime_now()
         ta = api.TimeAxis(t0, api.deltaminutes(30), 48*2)
         data = np.linspace(0, 10, ta.size())
-        ts = api.TimeSeries(ta, data)
+        ts = api.TimeSeries(ta, data, api.POINT_INSTANT_VALUE)
 
         rcf1 = api.RatingCurveFunction()
         rcf1.add_segment(0, 1, 0, 1)
@@ -929,7 +934,7 @@ class TimeSeries(unittest.TestCase):
 
         self.assertTrue(rcsts_2.needs_bind())
         fbi = rcsts_2.find_ts_bind_info()
-        self.assertTrue(len(fbi), 1)
+        self.assertEqual(len(fbi), 1)
         fbi[0].ts.bind(ts)
         rcsts_2.bind_done()
         self.assertFalse(rcsts_2.needs_bind())
@@ -939,6 +944,57 @@ class TimeSeries(unittest.TestCase):
             expected = (1*ts.get(i).v if ts.get(i).v < 5 else 2*ts.get(i).v) if ts.get(i).t < t0 + api.deltahours(24) else (3*ts.get(i).v if ts.get(i).v < 8 else 4*ts.get(i).v)
             self.assertEqual(rcsts_2.get(i).t, ts.get(i).t)
             self.assertEqual(rcsts_2.get(i).v, expected)
+
+    def test_krls_ts(self):
+        t0 = api.utctime_now()
+        ta = api.TimeAxis(t0, api.deltahours(1), 30*24)
+        data = np.sin(np.linspace(0, 2*np.pi, ta.size()))
+        ts_data = api.TimeSeries(ta, data, api.POINT_INSTANT_VALUE)
+
+        ts = api.TimeSeries("a")
+        ts_krls = ts.krls_interpolation(api.deltahours(3))
+
+        ts_krls_blob = ts_krls.serialize()
+        ts2_krls = api.TimeSeries.deserialize(ts_krls_blob)
+
+        self.assertTrue(ts2_krls.needs_bind())
+        fbi = ts2_krls.find_ts_bind_info()
+        self.assertEqual(len(fbi), 1)
+        fbi[0].ts.bind(ts_data)
+        ts2_krls.bind_done()
+        self.assertFalse(ts2_krls.needs_bind())
+
+        self.assertEqual(len(ts2_krls), len(ts_data))
+        for i in range(len(ts2_krls)):
+            self.assertAlmostEqual(ts2_krls.values[i], ts_data.values[i], places=1)
+
+    def test_ts_get_krls_predictor(self):
+        t0 = api.utctime_now()
+        ta = api.TimeAxis(t0, api.deltahours(1), 30*24)
+        data = np.sin(np.linspace(0, 2*np.pi, ta.size()))
+        ts_data = api.TimeSeries(ta, data, api.POINT_INSTANT_VALUE)
+
+        ts = api.TimeSeries("a")
+
+        try:
+            ts.get_krls_predictor()
+            self.fail("should not be able to get predictor for unbound")
+        except: pass
+
+        fbi = ts.find_ts_bind_info()
+        fbi[0].ts.bind(ts_data)
+        ts.bind_done()
+
+        pred = ts.get_krls_predictor(api.deltahours(3))
+
+        ts_krls = pred.predict(ta)
+        self.assertEqual(len(ts_krls), len(ts_data))
+        ts_mse = pred.mse_ts(ts_data)
+        self.assertEqual(len(ts_mse), len(ts_data))
+        for i in range(len(ts_krls)):
+            self.assertAlmostEqual(ts_krls.values[i], ts_data.values[i], places=1)
+            self.assertAlmostEqual(ts_mse.values[i], 0, places=2)
+        self.assertAlmostEqual(pred.predictor_mse(ts_data), 0, places=2)
 
 
 if __name__ == "__main__":

@@ -56,7 +56,9 @@ template<class Archive>
 void shyft::api::aref_ts::serialize(Archive & ar, const unsigned int version) {
     ar
     & make_nvp("ipoint_ts",base_object<shyft::api::ipoint_ts>(*this))
-    & make_nvp("rep", rep)
+    & make_nvp("id", id)
+    & make_nvp("rep",rep)
+
     ;
 }
 
@@ -132,6 +134,18 @@ void shyft::time_series::rating_curve_ts<shyft::api::apoint_ts>::serialize(Archi
 		& make_nvp("bound", bd)
 		;
 	bound = bd;
+}
+
+template<class Archive>
+void shyft::api::krls_interpolation_ts::serialize(Archive & ar, const unsigned int version) {
+    bool bd = bound;
+    ar
+        & make_nvp("ipoint_ts", base_object<shyft::api::ipoint_ts>(*this))
+        & make_nvp("ts", ts)
+        & make_nvp("predictor", predictor)
+        & make_nvp("bound", bd)
+        ;
+    bound = bd;
 }
 
 template<class Archive>
@@ -265,6 +279,7 @@ x_serialize_implement(shyft::api::abin_op_scalar_ts);
 x_serialize_implement(shyft::api::abin_op_ts);
 x_serialize_implement(shyft::api::abin_op_ts_scalar);
 x_serialize_implement(shyft::api::apoint_ts);
+x_serialize_implement(shyft::api::krls_interpolation_ts);
 x_serialize_implement(shyft::api::cell_state_id);
 x_serialize_implement(shyft::api::cell_state_with_id<shyft::core::hbv_stack::state>);
 x_serialize_implement(shyft::api::cell_state_with_id<shyft::core::pt_gs_k::state>);
@@ -299,6 +314,7 @@ x_arch(shyft::api::abin_op_scalar_ts);
 x_arch(shyft::api::abin_op_ts);
 x_arch(shyft::api::abin_op_ts_scalar);
 x_arch(shyft::api::apoint_ts);
+x_arch(shyft::api::krls_interpolation_ts);
 x_arch(shyft::api::cell_state_id);
 x_arch(shyft::api::cell_state_with_id<shyft::core::hbv_stack::state>);
 x_arch(shyft::api::cell_state_with_id<shyft::core::pt_gs_k::state>);

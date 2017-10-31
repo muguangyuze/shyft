@@ -315,25 +315,48 @@ namespace shyft{
          */
         template <class TA>
         struct point_ts {
-            typedef TA ta_t;
+			typedef TA ta_t;
+
             TA ta;
-            const TA& time_axis() const {return ta;}
             vector<double> v;
-            ts_point_fx fx_policy;
+			ts_point_fx fx_policy = POINT_INSTANT_VALUE;
 
             ts_point_fx point_interpretation() const { return fx_policy; }
             void set_point_interpretation(ts_point_fx point_interpretation) { fx_policy=point_interpretation;}
 
-            point_ts():fx_policy(ts_point_fx::POINT_INSTANT_VALUE){}
-            point_ts(const TA& ta, double fill_value,ts_point_fx fx_policy=POINT_INSTANT_VALUE):ta(ta),v(ta.size(),fill_value),fx_policy(fx_policy) {}
-            point_ts(const TA& ta,const vector<double>&vx,ts_point_fx fx_policy=POINT_INSTANT_VALUE):ta(ta),v(vx),fx_policy(fx_policy) {
+			point_ts() = default;
+
+			point_ts(const TA & ta, double fill_value, ts_point_fx fx_policy = POINT_INSTANT_VALUE)
+				: ta{ ta }, v(ta.size(), fill_value), fx_policy{ fx_policy } { }
+
+			point_ts(const TA & ta, const vector<double> & vx, ts_point_fx fx_policy = POINT_INSTANT_VALUE)
+				: ta{ ta }, v{ vx }, fx_policy{ fx_policy }
+			{
                 if(ta.size() != v.size())
                     throw runtime_error("point_ts: time-axis size is different from value-size");
             }
+
+			point_ts(TA && tax, vector<double> && vx, ts_point_fx fx_policy= POINT_INSTANT_VALUE )
+				: ta{ std::move(tax) }, v{ std::move(vx) }, fx_policy{ fx_policy }
+			{
+				if(ta.size() != v.size())
+					throw runtime_error("point_ts: time-axis size is different from value-size");
+			}
+
+			point_ts(const TA & tax, vector<double> && vx, ts_point_fx fx_policy= POINT_INSTANT_VALUE )
+				: ta{ tax }, v{ std::move(vx) }, fx_policy{ fx_policy }
+			{
+				if(ta.size() != v.size())
+					throw runtime_error("point_ts: time-axis size is different from value-size");
+			}
+
             //TODO: move/cp constructors needed ?
             //TODO should we provide/hide v ?
             // TA ta, ta is expected to provide 'time_axis' functions as needed
             // so we do not re-pack and provide functions like .size(), .index_of etc.
+
+			const TA & time_axis() const { return ta; }
+
             /**\brief the function value f(t) at time t, fx_policy taken into account */
             double operator()(utctime t) const {
                 size_t i = ta.index_of(t);
@@ -2098,7 +2121,7 @@ namespace shyft{
             std::vector<rts_t> r;r.reserve(n);
             for (size_t i = 0;i<n;++i)
                 r.emplace_back(make_time_shift_fx(ts, t0 - cal.add(t, dt, i)));
-            return std::move(r);
+            return r;
         }
 
         /**bind ref_ts
