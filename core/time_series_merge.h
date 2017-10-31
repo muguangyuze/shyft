@@ -1,9 +1,7 @@
 #pragma once
-#ifdef SHYFT_NO_PCH
 #include <string>
 #include <vector>
 #include <algorithm>
-#endif // SHYFT_NO_PCH
 
 //assume core_pch.h is included, so no vector etc.
 #include "utctime_utilities.h"
@@ -97,6 +95,21 @@ namespace shyft {
                 t_previous_end=t_end;
             }
             return ts_t(ta_t(tv,t_previous_end),vv,tsv.front().point_interpretation());
+        }
+
+        /** merge two point_ts<ta> a and b into a new time-series
+        *
+        * In merge(a,b), 'a' has priority, 'b' just extends/contributes at both end.
+        *
+        * \return a new merged time-series, or exception if not possible to merge
+        *
+        * \see time_axis::can_merge(..) for requirements
+        */
+        template <typename ta>
+        point_ts<ta> merge(const point_ts<ta>& a, const point_ts<ta>&b) {
+            if (!can_merge(a.ta, b.ta)) throw runtime_error(string("can not merge time-series"));
+            auto m = time_axis::compute_merge_info(a.ta, b.ta);
+            return point_ts<ta>{ time_axis::merge(a.ta, b.ta, m), merge(a.v, b.v, m), a.fx_policy };
         }
 
         /** \brief nash-sutcliffe evaluate slices from a set of forecast against observed

@@ -1,4 +1,14 @@
 #pragma once
+
+#include <string>
+#include <vector>
+#include <algorithm>
+#include <memory>
+#include <cmath>
+#include <limits>
+#include <stdexcept>
+
+#include "core_pch.h"
 #include "cell_model.h"
 #include "pt_hps_k.h"
 
@@ -146,8 +156,8 @@ namespace shyft {
                 state_collector() : collect_state(false), destination_area(0.0) {}
                 state_collector(const timeaxis_t& time_axis)
                  : collect_state(false), destination_area(0.0),
-                   kirchner_discharge(time_axis, 0.0), 
-                   hps_swe(time_axis, 0.0), 
+                   kirchner_discharge(time_axis, 0.0),
+                   hps_swe(time_axis, 0.0),
                    hps_sca(time_axis, 0.0),
                    hps_surface_heat(time_axis, 0.0)
                 { /* Do nothing */ }

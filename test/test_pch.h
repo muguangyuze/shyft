@@ -9,22 +9,20 @@
 #pragma warning (disable : 4244)
 #pragma warning (disable : 4503)
 #endif
-#ifdef SHYFT_NO_PCH
+
 #include <chrono>
 #include <iostream>
-
-#else
-#include "core/core_pch.h"
-#endif // SHYFT_NO_PCH
+#include <cmath>
 #include <doctest/doctest.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
+
 #define TS_ASSERT_EQUALS(a,b) FAST_CHECK_EQ((a),(b))
 #define TS_ASSERT_DIFFERS(a,b) FAST_CHECK_NE((a),(b))
-#define TS_ASSERT_DELTA(a,b,d) CHECK(std::abs((a)-(b))<=(d))
+#define TS_ASSERT_DELTA(a,b,d) FAST_CHECK_UNARY(std::abs((a)-(b)) <= (d))
 #define TS_ASSERT(a) FAST_CHECK_UNARY((a) == true)
 #define TS_ASSERT_LESS_THAN(a,b) FAST_CHECK_LT((a),(b))
 #define TS_WARN(msg) WARN_UNARY((msg)!=nullptr)

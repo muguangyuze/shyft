@@ -19,6 +19,13 @@
 
 
 #pragma once
+#include <string>
+#include <vector>
+#include <algorithm>
+#include <cmath>
+#include <sstream>
+
+#include "core_pch.h"
 #include "time_series.h"
 #include "utctime_utilities.h"
 

@@ -1,11 +1,13 @@
-﻿from shyft import api
+﻿import math
+import numpy as np
+import unittest
+
+from shyft import api
 from shyft.api import pt_gs_k
 from shyft.api import pt_hs_k
 from shyft.api import pt_ss_k
 from shyft.api import hbv_stack
 from shyft.api import pt_hps_k
-import unittest
-import numpy as np
 
 
 class ShyftApi(unittest.TestCase):
@@ -339,12 +341,21 @@ class ShyftApi(unittest.TestCase):
         self.assertEqual(2, tv.size())
         self.assertAlmostEqual(tv[0].ts.value(1), 1.5)  # average value 0..1 ->0.5
         self.assertAlmostEqual(tv[0].ts.value(2), 2.5)  # average value 0..1 ->0.5
-        self.assertAlmostEqual(tv[0].ts.value(3), 3.0)  # average value 0..1 ->0.5
+        # self.assertAlmostEqual(tv[0].ts.value(3), 3.0)  # original flat out at end, but now:
+        self.assertTrue(math.isnan(tv[0].ts.value(3)))  # strictly linear between points.
         # and that the target vector now have its own copy of ts
         tsa.set(1, 3.0)
         self.assertAlmostEqual(tv[0].ts.value(1), 1.5)  # make sure the ts passed onto target spec, is a copy
         self.assertAlmostEqual(tsa.value(1), 3.0)  # and that we really did change the source
-
+        # Create a clone of target specification vector
+        tv2 = api.TargetSpecificationVector(tv)
+        self.assertEqual(2, tv2.size())
+        self.assertAlmostEqual(tv2[0].ts.value(1), 1.5)  # average value 0..1 ->0.5
+        self.assertAlmostEqual(tv2[0].ts.value(2), 2.5)  # average value 0..1 ->0.5
+        self.assertTrue(math.isnan(tv2[0].ts.value(3)))  # average value 0..1 ->0.5
+        tv2[0].scale_factor = 10.0
+        self.assertAlmostEqual(tv[0].scale_factor, 1.0)
+        self.assertAlmostEqual(tv2[0].scale_factor, 10.0)
     def test_create_target_spec_from_std_time_series(self):
         """
         Verify we can create target-spec giving ordinary ts,

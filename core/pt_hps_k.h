@@ -1,4 +1,12 @@
 #pragma once
+#include <string>
+#include <vector>
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <stdexcept>
+
+#include "core_pch.h"
 
 #include "priestley_taylor.h"
 #include "kirchner.h"
