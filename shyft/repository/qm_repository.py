@@ -202,5 +202,7 @@ class QMRepository(interfaces.GeoTsRepository):
                             # TODO: read prior if repo_prior_idx is None
 
                 api.quantile_map_forecast(forecast_sets, weight_sets, prior_data, ta, self.qm_interp_param[0],
-                                           self.qm_interp_param[1], True)
+                                          self.qm_interp_param[1], True)
+                # api.quantile_map_forecast(forecast_sets, weight_sets, prior_data, ta, self.qm_interp_param[0],
+                #                           self.qm_interp_param[1], True)
                 # TODO: check return type
