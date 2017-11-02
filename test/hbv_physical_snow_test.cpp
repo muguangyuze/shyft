@@ -30,8 +30,6 @@ TEST_CASE("test_hbv_physical_snow_mass_balance_at_snowpack_reset") {
     parameter p(s, a);
     state state;
     response r;
-    utctime t0 = 0;
-    utctime t1 = 3600; // One hour
     double precipitation = 0.04;
     double temperature = 1.0;
     double sca = 1.0;
@@ -66,8 +64,6 @@ TEST_CASE("test_hbv_physical_snow_mass_balance_at_snowpack_buildup") {
     state state;
     response r;
 
-    utctime t0 = 0;
-    utctime t1 = 3600; // One hour
     double precipitation = 0.15;
     double temperature = -1.0;
     double sca = 0.6;
@@ -109,8 +105,6 @@ TEST_CASE("test_hbv_physical_snow_mass_balance_rain_no_snow") {
     state state;
     response r;
 
-    utctime t0 = 0;
-    utctime t1 = 3600; // One hour
     double precipitation = 0.15;
     double temperature = p.tx;
     double sca = 0.0;
@@ -146,8 +140,6 @@ TEST_CASE("test_hbv_physical_snow_mass_balance_melt_no_precip") {
     state state;
     response r;
 
-    utctime t0 = 0;
-    utctime t1 = 3600; // One hour
     double precipitation = 0.0;
     double temperature = 3.0;
     double sca = 0.5;
