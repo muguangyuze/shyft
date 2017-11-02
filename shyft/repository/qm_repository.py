@@ -20,6 +20,17 @@ class QMRepository(interfaces.GeoTsRepository):
         self.qm_interp_param = qm_interp_param
         self.start_time = start_time
         self.bbox = bbox
+        self.source_type_map = {"relative_humidity": api.RelHumSource,
+                                "temperature": api.TemperatureSource,
+                                "precipitation": api.PrecipitationSource,
+                                "radiation": api.RadiationSource,
+                                "wind_speed": api.WindSpeedSource}
+
+        self.source_vector_map = {"relative_humidity": api.RelHumSourceVector,
+                                "temperature": api.TemperatureSourceVector,
+                                "precipitation": api.PrecipitationSourceVector,
+                                "radiation": api.RadiationSourceVector,
+                                "wind_speed": api.WindSpeedSourceVector}
 
     def _read_fcst(self, input_source_types):
         # Read forecasts from repository for each forecast group
@@ -87,24 +98,23 @@ class QMRepository(interfaces.GeoTsRepository):
             if src_type == 'precipitation':
                 # just setting som idw_params for time being
                 idw_params = api.IDWPrecipitationParameter()
-                idw_params.max_distance = 6000
+                idw_params.max_distance = 15000
                 idw_params.max_members = 4
                 idw_params.gradient_by_equation = False
                 prep_fcst[src_type] = api.idw_precipitation(forecast[src_type], target_grid, ta_fixed_dt, idw_params)
             else:
                 # just setting som idw_params for time being
                 idw_params = api.IDWTemperatureParameter()
-                idw_params.max_distance = 6000
+                idw_params.max_distance = 15000
                 idw_params.max_members = 4
                 idw_params.gradient_by_equation = False
                 prep_fcst[src_type] = api.idw_temperature(forecast[src_type], target_grid, ta_fixed_dt, idw_params)
         return prep_fcst
 
-    def _prep_fcst(self, input_source_types, resolution_key):
-        # Identifies space-time resolution and call downscaling routene
+    def _prep_fcst(self, raw_fcst_lst, input_source_types, resolution_key):
+        # Identifies space-time resolution and calls downscaling routine
 
         qm_cfg_params = self.qm_cfg_params
-        raw_fcst_lst = self._read_fcst(input_source_types)
         qm_resolution_idx, ta = self.qm_resolution[resolution_key]
 
         # Use prior resolution as target resolution if nothing is specified
@@ -124,34 +134,68 @@ class QMRepository(interfaces.GeoTsRepository):
                 period_end = self.start_time + api.deltahours(24 * period)
                 ta_end = ta.total_period().end
                 new_n = (min(period_end, ta_end) - ta.time(0)) // ta.fixed_dt.delta_t
-                ta = api.TimeAxis(ta.time(0), ta.fixed_dt.delta_t, new_n)
+                ta_to_idw = api.TimeAxis(ta.time(0), ta.fixed_dt.delta_t, new_n)
+            else:
+                ta_to_idw = ta
 
-            prep_fcst = [[self._downscaling(input_source_types, f_m, target_grid, ta.fixed_dt) for f_m in fct] for fct
-                         in raw_fcst]
-            # prep_fcst = [self._downscaling(input_source_types, f_m, target_grid, ta.fixed_dt) for f_m in raw_fcst]
-
-            # for src_type in input_source_types:
-            #     if src_type == 'precipitation':
-            #         # just setting som idw_params for time being
-            #         idw_params = api.IDWPrecipitationParameter()
-            #         idw_params.max_distance = 6000
-            #         idw_params.max_members = 4
-            #         idw_params.gradient_by_equation = False
-            #         prep_fcst = [{src_type: api.idw_precipitation(f_m[src_type], target_grid, ta.fixed_dt, idw_params)}
-            #                      for f_m in raw_fcst]
-            #     else:
-            #         # just setting som idw_params for time being
-            #         idw_params = api.IDWTemperatureParameter()
-            #         idw_params.max_distance = 6000
-            #         idw_params.max_members = 4
-            #         idw_params.gradient_by_equation = False
-            #
-            #     prep_fcst = [{src_type: api.idw_temperature(f_m[src_type], target_grid, ta.fixed_dt, idw_params)}
-            #                      for f_m in raw_fcst]
+            prep_fcst = [[self._downscaling(input_source_types, f_m, target_grid, ta_to_idw.fixed_dt) for f_m in fct]
+                         for fct in raw_fcst]
 
             prep_fcst_lst.append(prep_fcst)
 
-        return prep_fcst_lst, target_grid, ta
+        return prep_fcst_lst, target_grid
+
+    def _call_qm(self, prep_fcst_lst, geo_points, ta, input_source_types):
+
+        # TODO: Extend handling to cover all cases and send out warnings
+        # Check ta against interpolation start and end times
+        # Simple logic for time being, should be refined for the overlap cases
+        interp_start = self.qm_interp_param[0]
+        interp_end = self.qm_interp_param[1]
+        ta_start = ta.time(0)
+        ta_end = ta.time(ta.size()-1) # start of last time step
+        if interp_start > ta_end:
+            interp_start = api.no_utctime
+            interp_end = api.no_utctime
+        if interp_end > ta_end:
+            interp_end = ta_end
+
+        dict = {}
+        for src in input_source_types:
+            qm_scenarios = []
+            for geo_pt_idx, geo_pt in enumerate(geo_points):
+                forecast_sets = api.TsVectorSet()
+
+                weight_sets = api.DoubleVector()
+                for i, fcst_group in enumerate(prep_fcst_lst) :
+                   for j, forecast in enumerate(fcst_group):
+                        weight_sets.append(self.qm_cfg_params[i]['w'][j])
+                        scenarios = api.TsVector()
+                        for member in forecast:
+                            scenarios.append(member[src][geo_pt_idx].ts)
+                        forecast_sets.append(scenarios)
+                        if i == self.repo_prior_idx and j==0:
+                            prior_data = scenarios
+                            # TODO: read prior if repo_prior_idx is None
+
+                qm_scenarios.append(api.quantile_map_forecast(forecast_sets, weight_sets, prior_data, ta,
+                                                         interp_start, interp_end, True))
+            dict[src] = np.array(qm_scenarios)
+        # TODO: write function to extract prior info like number of scenarios
+        nb_scen = dict[input_source_types[0]].shape[1]
+        results = []
+        for i in range(0,nb_scen):
+            source_dict = {}
+            for src in input_source_types:
+                ts_vct = dict[src][:, i]
+                vct = self.source_vector_map[src]()
+                [vct.append(self.source_type_map[src](geo_pt, ts)) for geo_pt, ts in zip(geo_points, ts_vct)]
+                # Alternatives:
+                # vct[:] = [self.source_type_map[src](geo_pt, ts) for geo_pt, ts in zip(geo_points, ts_vct)]
+                # vct = self.source_vector_map[src]([self.source_type_map[src](geo_pt, ts) for geo_pt, ts in zip(geo_points, ts_vct)])
+                source_dict[src] = vct
+            results.append(source_dict)
+        return results
 
     def get_forecast_ensembles(self):
         # should replace 'get_forecast_ensemble' in the long-run
@@ -183,26 +227,10 @@ class QMRepository(interfaces.GeoTsRepository):
         if self.repo_prior_idx is None:
             prior = self._read_prior()
 
-        prep_fcst_lst, target_grid, ta = self._prep_fcst(input_source_types, 'long')
-
-        for geo_pt_idx, geo_pt in enumerate(target_grid):
-            for src in input_source_types:
-                forecast_sets = api.TsVectorSet()
-                # prior_data = api.TsVector()
-                weight_sets = api.DoubleVector()
-                for i, fcst_group in enumerate(prep_fcst_lst) :
-                   for j, forecast in enumerate(fcst_group):
-                        weight_sets.append(self.qm_cfg_params[i]['w'][j])
-                        scenarios = api.TsVector()
-                        for member in forecast:
-                            scenarios.append(member[src][geo_pt_idx].ts)
-                        forecast_sets.append(scenarios)
-                        if i == self.repo_prior_idx and j==0:
-                            prior_data = scenarios
-                            # TODO: read prior if repo_prior_idx is None
-
-                api.quantile_map_forecast(forecast_sets, weight_sets, prior_data, ta, self.qm_interp_param[0],
-                                          self.qm_interp_param[1], True)
-                # api.quantile_map_forecast(forecast_sets, weight_sets, prior_data, ta, self.qm_interp_param[0],
-                #                           self.qm_interp_param[1], True)
-                # TODO: check return type
+        raw_fcst_lst = self._read_fcst(input_source_types)
+        results = {}
+        for key in list(self.qm_resolution.keys()):
+            ta = self.qm_resolution[key][1]
+            prep_fcst_lst, geo_points = self._prep_fcst(raw_fcst_lst, input_source_types, key)
+            results[key] = self._call_qm(prep_fcst_lst, geo_points, ta, input_source_types)
+        return results
