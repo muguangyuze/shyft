@@ -131,14 +131,6 @@
     <ClInclude Include="time_series_statistics.h">
       <Filter>time_series</Filter>
     </ClInclude>
-    <ClInclude Include="universal_snow.h">
-      <Filter>methods</Filter>
-    </ClInclude>
-    <ClInclude Include="pt_us_k.h">
-      <Filter>method-stacks</Filter>
-    </ClInclude>
-    <ClInclude Include="pt_us_k_cell_model.h">
-      <Filter>method-stacks</Filter>
     <ClInclude Include="time_series_merge.h">
       <Filter>time_series</Filter>
     </ClInclude>

@@ -106,11 +106,6 @@
     <ClCompile Include="time_series_test.cpp">
       <Filter>time_series</Filter>
     </ClCompile>
-    <ClCompile Include="pt_us_k_test.cpp">
-      <Filter>method-stacks</Filter>
-    </ClCompile>
-    <ClCompile Include="universal_snow_test.cpp">
-      <Filter>methods</Filter>
     <ClCompile Include="qm_test.cpp" />
     <ClCompile Include="merge_test.cpp">
       <Filter>time_series</Filter>

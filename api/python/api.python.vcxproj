@@ -165,7 +165,6 @@
     <ClCompile Include="..\boostpython\api_target_specification.cpp" />
     <ClCompile Include="..\boostpython\api_time_axis.cpp" />
     <ClCompile Include="..\boostpython\api_time_series.cpp" />
-    <ClCompile Include="..\boostpython\api_universal_snow.cpp" />
     <ClCompile Include="..\boostpython\api_utctime.cpp" />
     <ClCompile Include="..\boostpython\api_vectors.cpp" />
     <ClCompile Include="..\boostpython\boostpython_pch.cpp">
