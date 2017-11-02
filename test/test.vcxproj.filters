@@ -112,6 +112,12 @@
     </ClCompile>
     <ClCompile Include="predictor_test.cpp" />
     <ClCompile Include="time_series_average_test.cpp" />
+    <ClCompile Include="hbv_physical_snow_test.cpp">
+      <Filter>methods</Filter>
+    </ClCompile>
+    <ClCompile Include="pt_hps_k_test.cpp">
+      <Filter>method-stacks</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="methods">
