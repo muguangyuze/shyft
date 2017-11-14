@@ -41,6 +41,7 @@ class QMRepository(interfaces.GeoTsRepository):
             nb_of_fcst = len(self.qm_cfg_params[i]['w'])
             is_ens = self.qm_cfg_params[i]['ens']
             if is_ens:
+                # TODO: revise this when get_forecast_ensembles is ready in concat versions
                 # raw_fcst = self.qm_cfg_params[i]['repo'].get_forecast_ensemble(self.start_time, self.bbox)
                 # we read only one ensemble for now until ec_concat for ensemble is ready
                 # when we have get_forecast_ensembles (read multiple ensemble sets at once) method available
@@ -138,6 +139,8 @@ class QMRepository(interfaces.GeoTsRepository):
             else:
                 ta_to_idw = ta
 
+            # TODO: is downscaling required? If target_grid is obtained for fcst there is no need to downscale.
+            # Changing time axis might still be required
             prep_fcst = [[self._downscaling(input_source_types, f_m, target_grid, ta_to_idw.fixed_dt) for f_m in fct]
                          for fct in raw_fcst]
 
@@ -147,7 +150,7 @@ class QMRepository(interfaces.GeoTsRepository):
 
     def _call_qm(self, prep_fcst_lst, geo_points, ta, input_source_types):
 
-        # TODO: Extend handling to cover all cases and send out warnings
+        # TODO: Extend handling to cover all cases and send out warnings if interpolation period is modified
         # Check ta against interpolation start and end times
         # Simple logic for time being, should be refined for the overlap cases
         interp_start = self.qm_interp_param[0]
