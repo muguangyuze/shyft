@@ -7,7 +7,7 @@ class QMRepositoryError(Exception):
 
 class QMRepository(interfaces.GeoTsRepository):
 
-    def __init__(self, bbox, start_time, qm_interp_param, repo_prior_idx, qm_cfg_params, qm_resolution):
+    def __init__(self, bbox, qm_interp_param, repo_prior_idx, qm_cfg_params, qm_resolution):
         self.qm_cfg_params = qm_cfg_params
         # [{'repo': repo_obj, 'period': None, 'w': (850,300), 'ens': False},
         #                       {'repo': repo_obj, 'period': api.deltahours(6*24), 'w': (500,100), 'ens': False},
@@ -18,7 +18,7 @@ class QMRepository(interfaces.GeoTsRepository):
         #                  'long': (2, api.TimeAxis(start_time + api.deltahours(60 + 3 * 24), api.deltahours(6), 24))}
         self.repo_prior_idx = repo_prior_idx
         self.qm_interp_param = qm_interp_param
-        self.start_time = start_time
+        # self.start_time = start_time
         self.bbox = bbox
         self.source_type_map = {"relative_humidity": api.RelHumSource,
                                 "temperature": api.TemperatureSource,
@@ -32,7 +32,7 @@ class QMRepository(interfaces.GeoTsRepository):
                                 "radiation": api.RadiationSourceVector,
                                 "wind_speed": api.WindSpeedSourceVector}
 
-    def _read_fcst(self, input_source_types):
+    def _read_fcst(self, start_time, input_source_types):
         # Read forecasts from repository for each forecast group
         # Hierachy of return is list of forecast grup, list of forecasts, list of forecast members where each member
         # is a source-type keyed dictionary of geo time seies
@@ -46,14 +46,14 @@ class QMRepository(interfaces.GeoTsRepository):
                 # we read only one ensemble for now until ec_concat for ensemble is ready
                 # when we have get_forecast_ensembles (read multiple ensemble sets at once) method available
                 # in arome_concat and ec_concat OR arome raw and ec raw then we use that
-                raw_fcst = self.qm_cfg_params[i]['repo'].get_forecast_ensemble(input_source_types, None, self.start_time,
+                raw_fcst = self.qm_cfg_params[i]['repo'].get_forecast_ensemble(input_source_types, None, start_time,
                                                                                geo_location_criteria=self.bbox)
             else:
                 # if using either arome_concat or ec_concat
                 # return as list to match output from get_forecast_ensemble
                 raw_fcst = [self.qm_cfg_params[i]['repo'].get_forecasts(input_source_types,
                                {'latest_available_forecasts': {'number of forecasts': nb_of_fcst,
-                                                               'forecasts_older_than': self.start_time}},
+                                                               'forecasts_older_than': start_time}},
                                geo_location_criteria={'bbox': self.bbox})]
 
                 # if using arome raw and ec raw then we either need to call get_forecast two times OR
@@ -112,11 +112,11 @@ class QMRepository(interfaces.GeoTsRepository):
                 prep_fcst[src_type] = api.idw_temperature(forecast[src_type], target_grid, ta_fixed_dt, idw_params)
         return prep_fcst
 
-    def _prep_fcst(self, raw_fcst_lst, input_source_types, resolution_key):
+    def _prep_fcst(self, start_time, raw_fcst_lst, input_source_types, qm_resolution_idx, ta):
         # Identifies space-time resolution and calls downscaling routine
 
         qm_cfg_params = self.qm_cfg_params
-        qm_resolution_idx, ta = self.qm_resolution[resolution_key]
+        # qm_resolution_idx, ta = self.qm_resolution[resolution_key]
 
         # Use prior resolution as target resolution if nothing is specified
         if qm_resolution_idx is None and repo_prior_idx is not None:
@@ -132,7 +132,7 @@ class QMRepository(interfaces.GeoTsRepository):
 
             # Adjust time axis end if neccesary
             if period is not None:
-                period_end = self.start_time + api.deltahours(24 * period)
+                period_end = start_time + api.deltahours(24 * period)
                 ta_end = ta.total_period().end
                 new_n = (min(period_end, ta_end) - ta.time(0)) // ta.fixed_dt.delta_t
                 ta_to_idw = api.TimeAxis(ta.time(0), ta.fixed_dt.delta_t, new_n)
@@ -226,14 +226,16 @@ class QMRepository(interfaces.GeoTsRepository):
             the requested period, but must return sufficient data so
             that the f(t) can be evaluated over the requested period.
         """
-
+        start_time = t_c
         if self.repo_prior_idx is None:
             prior = self._read_prior()
 
-        raw_fcst_lst = self._read_fcst(input_source_types)
+        raw_fcst_lst = self._read_fcst(start_time, input_source_types)
         results = {}
         for key in list(self.qm_resolution.keys()):
-            ta = self.qm_resolution[key][1]
-            prep_fcst_lst, geo_points = self._prep_fcst(raw_fcst_lst, input_source_types, key)
+            qm_resolution_idx, start_hour, time_step, nb_time_steps = self.qm_resolution[key]
+            ta_start = start_time + api.deltahours(start_hour)
+            ta = api.TimeAxis(ta_start, api.deltahours(time_step), nb_time_steps)
+            prep_fcst_lst, geo_points = self._prep_fcst(start_time, raw_fcst_lst, input_source_types, qm_resolution_idx, ta)
             results[key] = self._call_qm(prep_fcst_lst, geo_points, ta, input_source_types)
         return results
