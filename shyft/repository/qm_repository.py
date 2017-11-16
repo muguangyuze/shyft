@@ -7,32 +7,28 @@ class QMRepositoryError(Exception):
 
 class QMRepository(interfaces.GeoTsRepository):
 
-    def __init__(self, bbox, qm_interp_param, repo_prior_idx, qm_cfg_params, qm_resolution):
+    def __init__(self, qm_interp_period, repo_prior_idx, qm_cfg_params, qm_resolution):
         self.qm_cfg_params = qm_cfg_params
-        # [{'repo': repo_obj, 'period': None, 'w': (850,300), 'ens': False},
-        #                       {'repo': repo_obj, 'period': api.deltahours(6*24), 'w': (500,100), 'ens': False},
-        #                       {'repo': repo_obj, 'period': None, 'w': (6,), 'ens': True}]
         self.qm_resolution = qm_resolution
-        # qm_resolution = {'short': (0, api.TimeAxis(start_time, api.deltahours(1), 60)),
-        #                  'mid': (1, api.TimeAxis(start_time + api.deltahours(60), api.deltahours(3), 24)),
-        #                  'long': (2, api.TimeAxis(start_time + api.deltahours(60 + 3 * 24), api.deltahours(6), 24))}
+        # qm_resolution = {'short': (0, 0, 1, 48),
+        #                  'mid': (1, 48, 3, 32),
+        #                  'long': (2, 48 + 3 * 32, 6, 32)}
         self.repo_prior_idx = repo_prior_idx
-        self.qm_interp_param = qm_interp_param
+        self.qm_interp_period = qm_interp_period
         # self.start_time = start_time
-        self.bbox = bbox
+        # self.bbox = bbox
         self.source_type_map = {"relative_humidity": api.RelHumSource,
                                 "temperature": api.TemperatureSource,
                                 "precipitation": api.PrecipitationSource,
                                 "radiation": api.RadiationSource,
                                 "wind_speed": api.WindSpeedSource}
-
         self.source_vector_map = {"relative_humidity": api.RelHumSourceVector,
                                 "temperature": api.TemperatureSourceVector,
                                 "precipitation": api.PrecipitationSourceVector,
                                 "radiation": api.RadiationSourceVector,
                                 "wind_speed": api.WindSpeedSourceVector}
 
-    def _read_fcst(self, start_time, input_source_types):
+    def _read_fcst(self, start_time, input_source_types, bbox):
         # Read forecasts from repository for each forecast group
         # Hierachy of return is list of forecast grup, list of forecasts, list of forecast members where each member
         # is a source-type keyed dictionary of geo time seies
@@ -47,14 +43,14 @@ class QMRepository(interfaces.GeoTsRepository):
                 # when we have get_forecast_ensembles (read multiple ensemble sets at once) method available
                 # in arome_concat and ec_concat OR arome raw and ec raw then we use that
                 raw_fcst = self.qm_cfg_params[i]['repo'].get_forecast_ensemble(input_source_types, None, start_time,
-                                                                               geo_location_criteria=self.bbox)
+                                                                               geo_location_criteria=bbox)
             else:
                 # if using either arome_concat or ec_concat
                 # return as list to match output from get_forecast_ensemble
                 raw_fcst = [self.qm_cfg_params[i]['repo'].get_forecasts(input_source_types,
                                {'latest_available_forecasts': {'number of forecasts': nb_of_fcst,
                                                                'forecasts_older_than': start_time}},
-                               geo_location_criteria={'bbox': self.bbox})]
+                               geo_location_criteria={'bbox':bbox})]
 
                 # if using arome raw and ec raw then we either need to call get_forecast two times OR
                 # we need to make a get_forecasts method which internally fetches from multiples files
@@ -153,10 +149,10 @@ class QMRepository(interfaces.GeoTsRepository):
         # TODO: Extend handling to cover all cases and send out warnings if interpolation period is modified
         # Check ta against interpolation start and end times
         # Simple logic for time being, should be refined for the overlap cases
-        interp_start = self.qm_interp_param[0]
-        interp_end = self.qm_interp_param[1]
         ta_start = ta.time(0)
         ta_end = ta.time(ta.size()-1) # start of last time step
+        interp_start = ta_start + self.qm_interp_period[0]
+        interp_end = ta_start + self.qm_interp_period[1]
         if interp_start > ta_end:
             interp_start = api.no_utctime
             interp_end = api.no_utctime
@@ -226,11 +222,16 @@ class QMRepository(interfaces.GeoTsRepository):
             the requested period, but must return sufficient data so
             that the f(t) can be evaluated over the requested period.
         """
+        # TODO: generalise handling of geo_criteria by passing it on to prep_fcst_lst
+        # TODO: Use utc_period to return scenarios for entire utc_period
+        # For time being assume geo_location_criteria is a bounding box
+        bbox = geo_location_criteria
+
         start_time = t_c
         if self.repo_prior_idx is None:
             prior = self._read_prior()
 
-        raw_fcst_lst = self._read_fcst(start_time, input_source_types)
+        raw_fcst_lst = self._read_fcst(start_time, input_source_types, bbox)
         results = {}
         for key in list(self.qm_resolution.keys()):
             qm_resolution_idx, start_hour, time_step, nb_time_steps = self.qm_resolution[key]
