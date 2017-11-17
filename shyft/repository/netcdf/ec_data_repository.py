@@ -357,7 +357,8 @@ class EcDataRepository(interfaces.GeoTsRepository):
         if ensemble_member == 'all':
             returndata = []
             for i in range(51):
-                ensemble_raw = {k: (raw_data[k][0][:,:,i,:,:], raw_data[k][1]) for k in raw_data.keys()}
+                ensemble_raw = {k: (raw_data[k][0][:,0,i,:,:], raw_data[k][1]) for k in raw_data.keys()}
+                #print([(k,ensemble_raw[k][0].shape) for k in ensemble_raw])
                 extracted_data = self._transform_raw(ensemble_raw, time[time_slice], issubset=issubset)
                 returndata.append(self._geo_ts_to_vec(self._convert_to_timeseries(extracted_data), pts))
         else:
@@ -459,11 +460,12 @@ class EcDataRepository(interfaces.GeoTsRepository):
 
         def prec_acc_conv(p, t):
             f = api.deltahours(1) / (t[1:] - t[:-1])  # conversion from mm/delta_t to mm/1hour
-            return np.clip((p[1:,0] - p[:-1,0])*f[:,np.newaxis,np.newaxis], 0.0, 1000.0)
+            return np.clip((p[1:,:,:] - p[:-1,:,:])*f[:,np.newaxis,np.newaxis], 0.0, 1000.0)
 
         def rad_conv(r,t):
-            dr = r[1:] - r[:-1]
-            return np.clip(dr/(t[1] - t[0])[np.newaxis,:,np.newaxis], 0.0, 5000.0)
+            dr = r[1:,:,:] - r[:-1,:,:]
+            return np.clip(dr/(t[1:] - t[:-1])[:,np.newaxis,np.newaxis], 0.0, 5000.0)
+
 
         convert_map = {"wind_speed": lambda x, t: (noop_space(x), noop_time(t)),
                        "relative_humidity": lambda x, t: (noop_space(x), noop_time(t)),
