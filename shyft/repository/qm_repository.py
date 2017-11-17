@@ -97,15 +97,38 @@ class QMRepository(interfaces.GeoTsRepository):
                 idw_params = api.IDWPrecipitationParameter()
                 idw_params.max_distance = 15000
                 idw_params.max_members = 4
-                idw_params.gradient_by_equation = False
+                idw_params.scale_factor = 1.0
                 prep_fcst[src_type] = api.idw_precipitation(forecast[src_type], target_grid, ta_fixed_dt, idw_params)
-            else:
+            elif src_type == 'temperature':
                 # just setting som idw_params for time being
                 idw_params = api.IDWTemperatureParameter()
                 idw_params.max_distance = 15000
                 idw_params.max_members = 4
                 idw_params.gradient_by_equation = False
                 prep_fcst[src_type] = api.idw_temperature(forecast[src_type], target_grid, ta_fixed_dt, idw_params)
+            elif src_type == 'radiation':
+                # just setting som idw_params for time being
+                idw_params = api.IDWParameter()
+                idw_params.max_distance = 15000
+                idw_params.max_members = 4
+                idw_params.distance_measure_factor = 1
+                slope_factor = api.DoubleVector([0.9]*len(target_grid))
+                prep_fcst[src_type] = api.idw_radiation(forecast[src_type], target_grid, ta_fixed_dt, idw_params, slope_factor)
+            elif src_type == 'wind_speed':
+                # just setting som idw_params for time being
+                idw_params = api.IDWParameter()
+                idw_params.max_distance = 15000
+                idw_params.max_members = 4
+                idw_params.distance_measure_factor = 1
+                prep_fcst[src_type] = api.idw_wind_speed(forecast[src_type], target_grid, ta_fixed_dt, idw_params)
+            elif src_type == 'relative_humidity':
+                # just setting som idw_params for time being
+                idw_params = api.IDWParameter()
+                idw_params.max_distance = 15000
+                idw_params.max_members = 4
+                idw_params.distance_measure_factor = 1
+                prep_fcst[src_type] = api.idw_relative_humidity(forecast[src_type], target_grid, ta_fixed_dt, idw_params)
+
         return prep_fcst
 
     def _prep_fcst(self, start_time, raw_fcst_lst, input_source_types, qm_resolution_idx, ta):
