@@ -7,7 +7,7 @@ class QMRepositoryError(Exception):
 
 class QMRepository(interfaces.GeoTsRepository):
 
-    def __init__(self, qm_interp_period, repo_prior_idx, qm_cfg_params, qm_resolution):
+    def __init__(self, qm_cfg_params, qm_resolution, repo_prior_idx, qm_interp_period):
         self.qm_cfg_params = qm_cfg_params
         self.qm_resolution = qm_resolution
         # qm_resolution = {'short': (0, 0, 1, 48),
@@ -158,7 +158,8 @@ class QMRepository(interfaces.GeoTsRepository):
             else:
                 ta_to_idw = ta
 
-            # TODO: is downscaling required? If target_grid is obtained for fcst there is no need to downscale.
+            # TODO: is downscaling required? If target_grid is obtained from fcst there is no need to downscale.
+            # TODO: Consider separating clipping of time axis from downscaling
             # Changing time axis might still be required
             prep_fcst = [[self._downscaling(input_source_types, f_m, target_grid, ta_to_idw.fixed_dt) for f_m in fct]
                          for fct in raw_fcst]
@@ -256,7 +257,7 @@ class QMRepository(interfaces.GeoTsRepository):
 
         raw_fcst_lst = self._read_fcst(start_time, input_source_types, bbox)
         results = {}
-        for key in list(self.qm_resolution.keys()):
+        for key in self.qm_resolution:
             qm_resolution_idx, start_hour, time_step, nb_time_steps = self.qm_resolution[key]
             ta_start = start_time + api.deltahours(start_hour)
             ta = api.TimeAxis(ta_start, api.deltahours(time_step), nb_time_steps)
