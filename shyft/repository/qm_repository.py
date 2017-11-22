@@ -30,8 +30,8 @@ class QMRepository(interfaces.GeoTsRepository):
 
     def _read_fcst(self, start_time, input_source_types, bbox):
         # Read forecasts from repository for each forecast group
-        # Hierachy of return is list of forecast grup, list of forecasts, list of forecast members where each member
-        # is a source-type keyed dictionary of geo time seies
+        # Hierachy of return is list of forecast class, list of forecasts, list of forecast members where each member
+        # is a source-type keyed dictionary of geo time seies. Within each forecast class the newest member is las in class
         raw_fcst_lst = []
         for i in range(len(self.qm_cfg_params)):
             nb_of_fcst = len(self.qm_cfg_params[i]['w'])
@@ -63,8 +63,6 @@ class QMRepository(interfaces.GeoTsRepository):
             slices = [slice(i * nb_geo_pts, (i + 1) * nb_geo_pts) for i in range(nb_of_fcst)]
             forecasts = [[{src_type: memb[src_type][slc] for src_type in input_source_types} for memb in raw_fcst] for slc
                          in slices]
-            # forecasts = [{src_type: memb[src_type][slc] for src_type in input_source_types} for memb in raw_fcst for
-            #              slc in slices]
 
             raw_fcst_lst.append(forecasts)
         return raw_fcst_lst
@@ -151,7 +149,7 @@ class QMRepository(interfaces.GeoTsRepository):
 
             # Adjust time axis end if neccesary
             if period is not None:
-                period_end = start_time + api.deltahours(24 * period)
+                period_end = start_time + api.deltahours(period)
                 ta_end = ta.total_period().end
                 new_n = (min(period_end, ta_end) - ta.time(0)) // ta.fixed_dt.delta_t
                 ta_to_idw = api.TimeAxis(ta.time(0), ta.fixed_dt.delta_t, new_n)
@@ -192,7 +190,7 @@ class QMRepository(interfaces.GeoTsRepository):
                 weight_sets = api.DoubleVector()
                 for i, fcst_group in enumerate(prep_fcst_lst) :
                    for j, forecast in enumerate(fcst_group):
-                        weight_sets.append(self.qm_cfg_params[i]['w'][j])
+                        weight_sets.append(weights[i][j])
                         scenarios = api.TsVector()
                         for member in forecast:
                             scenarios.append(member[src][geo_pt_idx].ts)
@@ -256,11 +254,17 @@ class QMRepository(interfaces.GeoTsRepository):
             prior = self._read_prior()
 
         raw_fcst_lst = self._read_fcst(start_time, input_source_types, bbox)
+
+        # Sort weights based on start time of fcst for first source_type  at first geo point from high to low
+        weights = [cl['w'] for cl in self.qm_cfg_params]
+        weights = [np.array(w)[np.argsort([-f[0][input_source_types[0]][0].ts.time(0) for f in f_cl])] for w, f_cl in
+                   zip(weights, raw_fcst_lst)]
+
         results = {}
         for key in self.qm_resolution:
             qm_resolution_idx, start_hour, time_step, nb_time_steps = self.qm_resolution[key]
             ta_start = start_time + api.deltahours(start_hour)
             ta = api.TimeAxis(ta_start, api.deltahours(time_step), nb_time_steps)
             prep_fcst_lst, geo_points = self._prep_fcst(start_time, raw_fcst_lst, input_source_types, qm_resolution_idx, ta)
-            results[key] = self._call_qm(prep_fcst_lst, geo_points, ta, input_source_types)
+            results[key] = self._call_qm(prep_fcst_lst, weights, geo_points, ta, input_source_types)
         return results
