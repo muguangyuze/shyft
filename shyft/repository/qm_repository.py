@@ -129,6 +129,17 @@ class QMRepository(interfaces.GeoTsRepository):
 
         return prep_fcst
 
+    def _clip_forecast(self, fcst_ens, ta):
+        new_fcst_ens = []
+        for fcst in fcst_ens:
+            src_dict = {}
+            for src, geo_ts in fcst.items():
+                vct = self.source_vector_map[src]()
+                [vct.append(self.source_type_map[src](obj.mid_point(), obj.ts.average(ta))) for obj in geo_ts]
+                src_dict[src] = vct
+            new_fcst_ens.append(src_dict)
+        return new_fcst_ens
+
     def _prep_fcst(self, start_time, raw_fcst_lst, input_source_types, qm_resolution_idx, ta):
         # Identifies space-time resolution and calls downscaling routine
 
@@ -144,29 +155,31 @@ class QMRepository(interfaces.GeoTsRepository):
 
         prep_fcst_lst = []
         for i in range(len(qm_cfg_params)):
-            raw_fcst = raw_fcst_lst[i]
+            raw_fcst_group = raw_fcst_lst[i]
             period = qm_cfg_params[i]['period']
 
-            # Adjust time axis end if neccesary
             if period is not None:
-                period_end = start_time + api.deltahours(period)
-                ta_end = ta.total_period().end
-                new_n = (min(period_end, ta_end) - ta.time(0)) // ta.fixed_dt.delta_t
-                ta_to_idw = api.TimeAxis(ta.time(0), ta.fixed_dt.delta_t, new_n)
-            else:
-                ta_to_idw = ta
+                # Clip forecasts. This might impact the time resolution
+                clipped_fcst_group = []
+                for fcst in raw_fcst_group:
+                    ta_org = fcst[0][input_source_types[0]][0].ts.time_axis
+                    dt = ta_org.time(1) - ta_org.time(0)
+                    n = period * api.deltahours(1) // dt
+                    ta_clip = api.TimeAxis(ta_org.time(0), dt, n)
+                    clipped_fcst_group.append(self._clip_forecast(fcst, ta_clip))
+                raw_fcst_group = clipped_fcst_group
 
             # TODO: is downscaling required? If target_grid is obtained from fcst there is no need to downscale.
             # TODO: Consider separating clipping of time axis from downscaling
             # Changing time axis might still be required
-            prep_fcst = [[self._downscaling(input_source_types, f_m, target_grid, ta_to_idw.fixed_dt) for f_m in fct]
-                         for fct in raw_fcst]
+            prep_fcst = [[self._downscaling(input_source_types, f_m, target_grid, ta.fixed_dt) for f_m in fct]
+                         for fct in raw_fcst_group]
 
             prep_fcst_lst.append(prep_fcst)
 
         return prep_fcst_lst, target_grid
 
-    def _call_qm(self, prep_fcst_lst, geo_points, ta, input_source_types):
+    def _call_qm(self, prep_fcst_lst, weights, geo_points, ta, input_source_types):
 
         # TODO: Extend handling to cover all cases and send out warnings if interpolation period is modified
         # Check ta against interpolation start and end times
@@ -257,7 +270,7 @@ class QMRepository(interfaces.GeoTsRepository):
 
         # Sort weights based on start time of fcst for first source_type  at first geo point from high to low
         weights = [cl['w'] for cl in self.qm_cfg_params]
-        weights = [np.array(w)[np.argsort([-f[0][input_source_types[0]][0].ts.time(0) for f in f_cl])] for w, f_cl in
+        weights = [[w[i] for i in np.argsort([-f[0][input_source_types[0]][0].ts.time(0) for f in f_cl])] for w, f_cl in
                    zip(weights, raw_fcst_lst)]
 
         results = {}
