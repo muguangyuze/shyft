@@ -86,24 +86,24 @@ class QMRepository(interfaces.GeoTsRepository):
     def _prep_prior(self):
         pass
 
-    def _downscaling(self, input_source_types, forecast, target_grid, ta_fixed_dt):
+    def _downscaling(self, forecast, target_grid, ta_fixed_dt):
         # Using idw for time being
         prep_fcst = {}
-        for src_type in input_source_types:
+        for src_type, fcst in forecast.items():
             if src_type == 'precipitation':
                 # just setting som idw_params for time being
                 idw_params = api.IDWPrecipitationParameter()
                 idw_params.max_distance = 15000
                 idw_params.max_members = 4
                 idw_params.scale_factor = 1.0
-                prep_fcst[src_type] = api.idw_precipitation(forecast[src_type], target_grid, ta_fixed_dt, idw_params)
+                prep_fcst[src_type] = api.idw_precipitation(fcst, target_grid, ta_fixed_dt, idw_params)
             elif src_type == 'temperature':
                 # just setting som idw_params for time being
                 idw_params = api.IDWTemperatureParameter()
                 idw_params.max_distance = 15000
                 idw_params.max_members = 4
                 idw_params.gradient_by_equation = False
-                prep_fcst[src_type] = api.idw_temperature(forecast[src_type], target_grid, ta_fixed_dt, idw_params)
+                prep_fcst[src_type] = api.idw_temperature(fcst, target_grid, ta_fixed_dt, idw_params)
             elif src_type == 'radiation':
                 # just setting som idw_params for time being
                 idw_params = api.IDWParameter()
@@ -111,25 +111,45 @@ class QMRepository(interfaces.GeoTsRepository):
                 idw_params.max_members = 4
                 idw_params.distance_measure_factor = 1
                 slope_factor = api.DoubleVector([0.9]*len(target_grid))
-                prep_fcst[src_type] = api.idw_radiation(forecast[src_type], target_grid, ta_fixed_dt, idw_params, slope_factor)
+                prep_fcst[src_type] = api.idw_radiation(fcst, target_grid, ta_fixed_dt, idw_params, slope_factor)
             elif src_type == 'wind_speed':
                 # just setting som idw_params for time being
                 idw_params = api.IDWParameter()
                 idw_params.max_distance = 15000
                 idw_params.max_members = 4
                 idw_params.distance_measure_factor = 1
-                prep_fcst[src_type] = api.idw_wind_speed(forecast[src_type], target_grid, ta_fixed_dt, idw_params)
+                prep_fcst[src_type] = api.idw_wind_speed(fcst, target_grid, ta_fixed_dt, idw_params)
             elif src_type == 'relative_humidity':
                 # just setting som idw_params for time being
                 idw_params = api.IDWParameter()
                 idw_params.max_distance = 15000
                 idw_params.max_members = 4
                 idw_params.distance_measure_factor = 1
-                prep_fcst[src_type] = api.idw_relative_humidity(forecast[src_type], target_grid, ta_fixed_dt, idw_params)
+                prep_fcst[src_type] = api.idw_relative_humidity(fcst, target_grid, ta_fixed_dt, idw_params)
 
         return prep_fcst
 
+    def _reduce_fcst_group_horizon(self, fcst_group, nb_hours):
+        # for each fcst in group; create time axis for clipping
+        clipped_fcst_group = []
+        for fcst in fcst_group:
+            # Get time acces from first src type in first member
+            ta = fcst[0][list(fcst[0].keys())[0]][0].ts.time_axis
+            clip_end = ta.time(0) + nb_hours * api.deltahours(1)
+            if ta.time(0) < clip_end < ta.total_period().end:
+                if ta.timeaxis_type == api.TimeAxisType.FIXED:
+                    dt = ta.time(1) - ta.time(0)
+                    n = nb_hours * api.deltahours(1) // dt
+                    ta = api.TimeAxis(ta.time(0), dt, n)
+                else:
+                    idx = ta.time_points < clip_end
+                    t_end = ta.time(int(idx.nonzero()[0][-1] + 1))
+                    ta = api.TimeAxis(api.UtcTimeVector(ta.time_points[idx].tolist()), t_end)
+            clipped_fcst_group.append(self._clip_forecast(fcst, ta))
+        return clipped_fcst_group
+
     def _clip_forecast(self, fcst_ens, ta):
+        # Clip ensemble forecast with ta
         new_fcst_ens = []
         for fcst in fcst_ens:
             src_dict = {}
@@ -140,7 +160,7 @@ class QMRepository(interfaces.GeoTsRepository):
             new_fcst_ens.append(src_dict)
         return new_fcst_ens
 
-    def _prep_fcst(self, start_time, raw_fcst_lst, input_source_types, qm_resolution_idx, ta):
+    def _prep_fcst(self, start_time, raw_fcst_lst, qm_resolution_idx, ta):
         # Identifies space-time resolution and calls downscaling routine
 
         qm_cfg_params = self.qm_cfg_params
@@ -156,23 +176,14 @@ class QMRepository(interfaces.GeoTsRepository):
         prep_fcst_lst = []
         for i in range(len(qm_cfg_params)):
             raw_fcst_group = raw_fcst_lst[i]
-            period = qm_cfg_params[i]['period']
-
-            if period is not None:
-                # Clip forecasts. This might impact the time resolution
-                clipped_fcst_group = []
-                for fcst in raw_fcst_group:
-                    ta_org = fcst[0][input_source_types[0]][0].ts.time_axis
-                    dt = ta_org.time(1) - ta_org.time(0)
-                    n = period * api.deltahours(1) // dt
-                    ta_clip = api.TimeAxis(ta_org.time(0), dt, n)
-                    clipped_fcst_group.append(self._clip_forecast(fcst, ta_clip))
-                raw_fcst_group = clipped_fcst_group
+            nb_hours = qm_cfg_params[i]['nb_hours']
+            if nb_hours is not None:
+                raw_fcst_group = self._reduce_fcst_group_horizon(raw_fcst_group, nb_hours)
 
             # TODO: is downscaling required? If target_grid is obtained from fcst there is no need to downscale.
             # TODO: Consider separating clipping of time axis from downscaling
             # Changing time axis might still be required
-            prep_fcst = [[self._downscaling(input_source_types, f_m, target_grid, ta.fixed_dt) for f_m in fct]
+            prep_fcst = [[self._downscaling(f_m, target_grid, ta.fixed_dt) for f_m in fct]
                          for fct in raw_fcst_group]
 
             prep_fcst_lst.append(prep_fcst)
@@ -278,6 +289,6 @@ class QMRepository(interfaces.GeoTsRepository):
             qm_resolution_idx, start_hour, time_step, nb_time_steps = self.qm_resolution[key]
             ta_start = start_time + api.deltahours(start_hour)
             ta = api.TimeAxis(ta_start, api.deltahours(time_step), nb_time_steps)
-            prep_fcst_lst, geo_points = self._prep_fcst(start_time, raw_fcst_lst, input_source_types, qm_resolution_idx, ta)
+            prep_fcst_lst, geo_points = self._prep_fcst(start_time, raw_fcst_lst, qm_resolution_idx, ta)
             results[key] = self._call_qm(prep_fcst_lst, weights, geo_points, ta, input_source_types)
         return results
