@@ -211,8 +211,8 @@ class QMRepository(interfaces.GeoTsRepository):
         # First re-organize weights - one weight per TVS.
         weight_sets = api.DoubleVector([w for ws in weights for w in ws])
 
+        # New version
         results = [{} for i in range(nb_prior_scenarios)]
-
         for src in input_source_types:
             qm_scenarios = []
             for geo_pt_idx, geo_pt in enumerate(geo_points):
@@ -245,45 +245,6 @@ class QMRepository(interfaces.GeoTsRepository):
                 # vct = self.source_vector_map[src]([self.source_type_map[src](geo_pt, ts) for geo_pt, ts in zip(geo_points, ts_vct)])
                 results[i][src] = vct
         return results
-
-        # weight_sets = api.DoubleVector([w for ws in weights for w in ws])
-        # dict = {}
-        # for src in input_source_types:
-        #     qm_scenarios = []
-        #     for geo_pt_idx, geo_pt in enumerate(geo_points):
-        #         forecast_sets = api.TsVectorSet()
-        #         for i, fcst_group in enumerate(prep_fcst_lst):
-        #             for j, forecast in enumerate(fcst_group):
-        #                 scenarios = api.TsVector()
-        #                 for member in forecast:
-        #                     scenarios.append(member[src][geo_pt_idx].ts)
-        #                 forecast_sets.append(scenarios)
-        #
-        #                 # TODO: handle prior similarly if repo_prior_idx is None
-        #                 if i == self.repo_prior_idx and j == 0:
-        #                     prior_data = scenarios
-        #
-        #
-        #         qm_scenarios.append(api.quantile_map_forecast(forecast_sets, weight_sets, prior_data, ta,
-        #                                                       interp_start, interp_end, True))
-        #     dict[src] = np.array(qm_scenarios)
-        #
-        # # Now organize to desired output format: ensenble of source-keyed dictionaries of  geo-ts
-        # # TODO: write function to extract info about prior like number of scenarios
-        # nb_scen = dict[input_source_types[0]].shape[1]
-        # results = []
-        # for i in range(0, nb_scen):
-        #     source_dict = {}
-        #     for src in input_source_types:
-        #         ts_vct = dict[src][:, i]
-        #         vct = self.source_vector_map[src]()
-        #         [vct.append(self.source_type_map[src](geo_pt, ts)) for geo_pt, ts in zip(geo_points, ts_vct)]
-        #         # Alternatives:
-        #         # vct[:] = [self.source_type_map[src](geo_pt, ts) for geo_pt, ts in zip(geo_points, ts_vct)]
-        #         # vct = self.source_vector_map[src]([self.source_type_map[src](geo_pt, ts) for geo_pt, ts in zip(geo_points, ts_vct)])
-        #         source_dict[src] = vct
-        #     results.append(source_dict)
-        # return results
 
     def get_forecast_ensembles(self):
         # should replace 'get_forecast_ensemble' in the long-run
@@ -340,4 +301,99 @@ class QMRepository(interfaces.GeoTsRepository):
 
             # TODO: need to prep prior if self.repo_prior_idx is None
             results[key] = self._call_qm(prep_fcst_lst, weights, geo_points, ta, input_source_types, nb_prior_scenarios)
+        return results
+
+    def _call_qm_old(self, prep_fcst_lst, weights, geo_points, ta, input_source_types, nb_prior_scenarios):
+
+        # TODO: Extend handling to cover all cases and send out warnings if interpolation period is modified
+        # Check ta against interpolation start and end times
+        # Simple logic for time being, should be refined for the overlap cases
+        ta_start = ta.time(0)
+        ta_end = ta.time(ta.size() - 1)  # start of last time step
+        interp_start = ta_start + self.qm_interp_period[0]
+        interp_end = ta_start + self.qm_interp_period[1]
+        if interp_start > ta_end:
+            interp_start = api.no_utctime
+            interp_end = api.no_utctime
+        if interp_end > ta_end:
+            interp_end = ta_end
+
+        # Re-organize data before sending to api.quantile_map_forecast. For each source type and geo_point, group
+        # forecasts as TsVectorSets, send to api.quantile_map_forecast and return results as ensemble of source-keyed
+        # dictionaries of  geo-ts
+        # First re-organize weights - one weight per TVS.
+        weight_sets = api.DoubleVector([w for ws in weights for w in ws])
+
+        # New version
+        # results = [{} for i in range(nb_prior_scenarios)]
+        # for src in input_source_types:
+        #     qm_scenarios = []
+        #     for geo_pt_idx, geo_pt in enumerate(geo_points):
+        #         forecast_sets = api.TsVectorSet()
+        #         for i, fcst_group in enumerate(prep_fcst_lst) :
+        #            for j, forecast in enumerate(fcst_group):
+        #                 scenarios = api.TsVector()
+        #                 for member in forecast:
+        #                     scenarios.append(member[src][geo_pt_idx].ts)
+        #                 forecast_sets.append(scenarios)
+        #                 if i == self.repo_prior_idx and j==0:
+        #                     prior_data = scenarios
+        #                     # TODO: read prior if repo_prior_idx is None
+        #
+        #         qm_scenarios.append(api.quantile_map_forecast(forecast_sets, weight_sets, prior_data, ta,
+        #                                                  interp_start, interp_end, True))
+        #
+        #     # Alternative: convert to array to enable slicing
+        #     # arr = np.array(qm_scenarios)
+        #
+        #     # Now organize to desired output format: ensemble of source-keyed dictionaries of  geo-ts
+        #     for i in range(0,nb_prior_scenarios):
+        #     # source_dict = {}
+        #         # ts_vct = arr[:, i]
+        #         ts_vct = [x[i] for x in qm_scenarios]
+        #         vct = self.source_vector_map[src]()
+        #         [vct.append(self.source_type_map[src](geo_pt, ts)) for geo_pt, ts in zip(geo_points, ts_vct)]
+        #         # Alternatives:
+        #         # vct[:] = [self.source_type_map[src](geo_pt, ts) for geo_pt, ts in zip(geo_points, ts_vct)]
+        #         # vct = self.source_vector_map[src]([self.source_type_map[src](geo_pt, ts) for geo_pt, ts in zip(geo_points, ts_vct)])
+        #         results[i][src] = vct
+        # return results
+
+        # Old version
+        weight_sets = api.DoubleVector([w for ws in weights for w in ws])
+        dict = {}
+        for src in input_source_types:
+            qm_scenarios = []
+            for geo_pt_idx, geo_pt in enumerate(geo_points):
+                forecast_sets = api.TsVectorSet()
+                for i, fcst_group in enumerate(prep_fcst_lst):
+                    for j, forecast in enumerate(fcst_group):
+                        scenarios = api.TsVector()
+                        for member in forecast:
+                            scenarios.append(member[src][geo_pt_idx].ts)
+                        forecast_sets.append(scenarios)
+
+                        # TODO: handle prior similarly if repo_prior_idx is None
+                        if i == self.repo_prior_idx and j == 0:
+                            prior_data = scenarios
+
+                qm_scenarios.append(api.quantile_map_forecast(forecast_sets, weight_sets, prior_data, ta,
+                                                              interp_start, interp_end, True))
+            dict[src] = np.array(qm_scenarios)
+
+        # Now organize to desired output format: ensenble of source-keyed dictionaries of  geo-ts
+        # TODO: write function to extract info about prior like number of scenarios
+        nb_prior_scenarios = dict[input_source_types[0]].shape[1]
+        results = []
+        for i in range(0, nb_prior_scenarios):
+            source_dict = {}
+            for src in input_source_types:
+                ts_vct = dict[src][:, i]
+                vct = self.source_vector_map[src]()
+                [vct.append(self.source_type_map[src](geo_pt, ts)) for geo_pt, ts in zip(geo_points, ts_vct)]
+                # Alternatives:
+                # vct[:] = [self.source_type_map[src](geo_pt, ts) for geo_pt, ts in zip(geo_points, ts_vct)]
+                # vct = self.source_vector_map[src]([self.source_type_map[src](geo_pt, ts) for geo_pt, ts in zip(geo_points, ts_vct)])
+                source_dict[src] = vct
+            results.append(source_dict)
         return results
