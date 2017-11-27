@@ -59,7 +59,15 @@ class ECConcatDataRepository(interfaces.GeoTsRepository):
                                  "precipitation_amount_acc": "precipitation",
                                  "x_wind_10m": "x_wind",
                                  "y_wind_10m": "y_wind",
-                                 "integral_of_surface_downwelling_shortwave_flux_in_air_wrt_time": "radiation"}
+                                 "integral_of_surface_downwelling_shortwave_flux_in_air_wrt_time": "radiation",
+                                 'sp': 'surface_air_pressure',
+                                 'tp': 'precipitation',
+                                 'u10': 'x_wind',
+                                 'v10': 'y_wind',
+                                 't2m': 'temperature',
+                                 'ssrd': 'radiation',
+                                 'd2m': 'dew_point_temperature_2m'
+                                }
 
         self.var_units = {'dew_point_temperature_2m': ['K'],
                           'surface_air_pressure': ['Pa'],
@@ -67,7 +75,15 @@ class ECConcatDataRepository(interfaces.GeoTsRepository):
                           "precipitation_amount_acc": ['kg/m^2'],
                           "x_wind_10m": ['m/s'],
                           "y_wind_10m": ['m/s'],
-                          "integral_of_surface_downwelling_shortwave_flux_in_air_wrt_time": ['W s/m^2']}
+                          "integral_of_surface_downwelling_shortwave_flux_in_air_wrt_time": ['W s/m^2'],
+                          'sp': ['Pa'],
+                          'tp': ['kg/m^2'],
+                          'u10': ['m/s'],
+                          'v10': ['m/s'],
+                          't2m': ['K'],
+                          'ssrd': ['W s/m^2'],
+                          'd2m': ['K']
+                          }
 
         self._shift_fields = ("precipitation_amount_acc",
                               "integral_of_surface_downwelling_shortwave_flux_in_air_wrt_time")
@@ -524,7 +540,11 @@ class ECConcatDataRepository(interfaces.GeoTsRepository):
                            "integral_of_surface_downwelling_shortwave_flux_in_air_wrt_time":
                                lambda x, t: (rad_conv(x, concat_v), concat_t(t)),
                            #"precipitation_amount": lambda x, t: (prec_conv(x), dacc_time(t)),
-                           "precipitation_amount_acc": lambda x, t: (prec_acc_conv(x, concat_v), concat_t(t))}
+                           "precipitation_amount_acc": lambda x, t: (prec_acc_conv(x, concat_v), concat_t(t)),
+                           't2m': lambda x, t: (air_temp_conv(x, concat_v), concat_t(t)),
+                           'ssrd': lambda x, t: (concat_v(x), concat_t(t)),
+                           'tp': lambda x, t: (concat_v(x), concat_t(t)),
+                           }
         else:
             convert_map = {"wind_speed": lambda x, t: (forecast_v(x), forecast_t(t)),
                            "relative_humidity": lambda x, t: (forecast_v(x), forecast_t(t)),
@@ -532,7 +552,11 @@ class ECConcatDataRepository(interfaces.GeoTsRepository):
                            "integral_of_surface_downwelling_shortwave_flux_in_air_wrt_time":
                                lambda x, t: (rad_conv(x, forecast_v), forecast_t(t, True)),
                            # "precipitation_amount": lambda x, t: (prec_conv(x), dacc_time(t)),
-                           "precipitation_amount_acc": lambda x, t: (prec_acc_conv(x, forecast_v), forecast_t(t, True))}
+                           "precipitation_amount_acc": lambda x, t: (prec_acc_conv(x, forecast_v), forecast_t(t, True)),
+                           't2m': lambda x, t: (air_temp_conv(x, forecast_v), forecast_t(t)),
+                           'ssrd': lambda x, t: (forecast_v(x), forecast_t(t)),
+                           'tp': lambda x, t: (forecast_v(x), forecast_t(t)),
+                           }
         res = {}
         for k, (v, ak) in data.items():
             res[k] = pad(*convert_map[ak](v, time))
