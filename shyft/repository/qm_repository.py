@@ -7,14 +7,15 @@ class QMRepositoryError(Exception):
 
 class QMRepository(interfaces.GeoTsRepository):
 
-    def __init__(self, qm_cfg_params, qm_resolution, repo_prior_idx, qm_interp_period):
+    def __init__(self, qm_cfg_params, qm_resolution, repo_prior_idx, qm_interp_hours):
         self.qm_cfg_params = qm_cfg_params
         self.qm_resolution = qm_resolution
         # qm_resolution = {'short': (0, 0, 1, 48),
         #                  'mid': (1, 48, 3, 32),
         #                  'long': (2, 48 + 3 * 32, 6, 32)}
         self.repo_prior_idx = repo_prior_idx
-        self.qm_interp_period = qm_interp_period
+        # self.qm_interp_period = (api.deltahours(qm_interp_hours[0]), api.deltahours(qm_interp_hours[1]))
+        self.qm_interp_hours = qm_interp_hours
         # self.start_time = start_time
         # self.bbox = bbox
         self.source_type_map = {"relative_humidity": api.RelHumSource,
@@ -197,8 +198,8 @@ class QMRepository(interfaces.GeoTsRepository):
         # Simple logic for time being, should be refined for the overlap cases
         ta_start = ta.time(0)
         ta_end = ta.time(ta.size()-1) # start of last time step
-        interp_start = ta_start + self.qm_interp_period[0]
-        interp_end = ta_start + self.qm_interp_period[1]
+        interp_start = ta_start + api.deltahours(self.qm_interp_hours[0])
+        interp_end = ta_start + api.deltahours(self.qm_interp_hours[1])
         if interp_start > ta_end:
             interp_start = api.no_utctime
             interp_end = api.no_utctime
@@ -310,8 +311,8 @@ class QMRepository(interfaces.GeoTsRepository):
         # Simple logic for time being, should be refined for the overlap cases
         ta_start = ta.time(0)
         ta_end = ta.time(ta.size() - 1)  # start of last time step
-        interp_start = ta_start + self.qm_interp_period[0]
-        interp_end = ta_start + self.qm_interp_period[1]
+        interp_start = ta_start + api.deltahours(self.qm_interp_hours[0])
+        interp_end = ta_start + api.deltahours(self.qm_interp_hours[1])
         if interp_start > ta_end:
             interp_start = api.no_utctime
             interp_end = api.no_utctime
