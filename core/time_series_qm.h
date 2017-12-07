@@ -290,7 +290,12 @@ namespace shyft {
                 interpolation_period = core::utcperiod();
             }
 
-            auto wvo_fc = wvo_accessor<typename tsv_t::value_type>(fc_idx_v, fc_weights, fc_tsv);
+            vector<tsa_t> fc_accessor_vec;
+            pri_accessor_vec.reserve(fc_tsv.size());
+            for (const auto& ts : fc_tsv)
+                fc_accessor_vec.emplace_back(ts, time_axis);
+
+            auto wvo_fc = wvo_accessor<tsa_t>(fc_idx_v, fc_weights, fc_accessor_vec);
 
 
             tsv_t output;
