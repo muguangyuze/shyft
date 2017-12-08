@@ -8,16 +8,11 @@ class QMRepositoryError(Exception):
 class QMRepository(interfaces.GeoTsRepository):
 
     def __init__(self, qm_cfg_params, qm_resolution, repo_prior_idx, qm_interp_hours):
+        # TODO: Check input
         self.qm_cfg_params = qm_cfg_params
         self.qm_resolution = qm_resolution
-        # qm_resolution = {'short': (0, 0, 1, 48),
-        #                  'mid': (1, 48, 3, 32),
-        #                  'long': (2, 48 + 3 * 32, 6, 32)}
         self.repo_prior_idx = repo_prior_idx
-        # self.qm_interp_period = (api.deltahours(qm_interp_hours[0]), api.deltahours(qm_interp_hours[1]))
         self.qm_interp_hours = qm_interp_hours
-        # self.start_time = start_time
-        # self.bbox = bbox
         self.source_type_map = {"relative_humidity": api.RelHumSource,
                                 "temperature": api.TemperatureSource,
                                 "precipitation": api.PrecipitationSource,
@@ -181,9 +176,8 @@ class QMRepository(interfaces.GeoTsRepository):
             if nb_hours is not None:
                 raw_fcst_group = self._reduce_fcst_group_horizon(raw_fcst_group, nb_hours)
 
-            # TODO: is downscaling required? If target_grid is obtained from fcst there is no need to downscale.
-            # TODO: Consider separating clipping of time axis from downscaling
-            # Changing time axis might still be required
+            # TODO: is downscaling required? If target_grid is obtained from fcst or all values are nan there is no need to downscale.
+            # Changing time axis resolution might still be required or can quantile_map_forecast handle this?
             prep_fcst = [[self._downscaling(f_m, target_grid, ta.fixed_dt) for f_m in fct]
                          for fct in raw_fcst_group]
 
