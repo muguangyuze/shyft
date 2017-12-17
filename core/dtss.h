@@ -209,20 +209,25 @@ struct server : dlib::server_iostream {
         auto cc = ts_cache.get(ts_ids,p);
         ts_vector_t r(ts_ids.size());
         std::vector<std::size_t> other;other.reserve(ts_ids.size());
-        // 1. filter out shyft://
-        //    if all shyft: return internal read
-        for(std::size_t i=0;i<ts_ids.size();++i) {
-            if(cc.find(ts_ids[i])==cc.end()) {
-                auto c=extract_shyft_url_container(ts_ids[i]);
-                if(c.size()) {
-                    r[i]=apoint_ts(make_shared<gpoint_ts>(internal(c).read(ts_ids[i].substr(shyft_prefix.size()+c.size()+1),p)));
-                    if(cache_all_reads) ts_cache.add(ts_ids[i],r[i]);
-                } else
-                    other.push_back(i);
-            } else {
-                r[i]=cc[ts_ids[i]];
-            }
-        }
+		if (cc.size() == ts_ids.size()) {
+			for(std::size_t i=0;i<ts_ids.size();++i)
+				r[i] = cc[ts_ids[i]];
+		} else {
+			// 1. filter out shyft://
+			//    if all shyft: return internal read
+			for (std::size_t i = 0; i < ts_ids.size(); ++i) {
+				if (cc.find(ts_ids[i]) == cc.end()) {
+					auto c = extract_shyft_url_container(ts_ids[i]);
+					if (c.size()) {
+						r[i] = apoint_ts(make_shared<gpoint_ts>(internal(c).read(ts_ids[i].substr(shyft_prefix.size() + c.size() + 1), p)));
+						if (cache_all_reads) ts_cache.add(ts_ids[i], r[i]);
+					} else
+						other.push_back(i);
+				} else {
+					r[i] = cc[ts_ids[i]];
+				}
+			}
+		}
         // 2. if other/more than shyft
         //    get all those
         if(other.size()) {
@@ -281,9 +286,9 @@ struct server : dlib::server_iostream {
     }
 
     ts_vector_t
-    do_evaluate_ts_vector(utcperiod bind_period, ts_vector_t& atsv) {
-        do_bind_ts(bind_period, atsv);
-        return ts_vector_t(api::deflate_ts_vector<apoint_ts>(atsv));
+		do_evaluate_ts_vector(utcperiod bind_period, ts_vector_t& atsv) {
+		do_bind_ts(bind_period, atsv);
+		return ts_vector_t{std::move(api::deflate_ts_vector<apoint_ts>(atsv))};
     }
 
     ts_vector_t

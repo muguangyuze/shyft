@@ -1320,7 +1320,7 @@ namespace shyft {
          */
         template <class Ts,class TsV>
         std::vector<Ts>
-        deflate_ts_vector(TsV const&tsv1) {
+        deflate_ts_vector(TsV &&tsv1) {
             std::vector<Ts> tsv2(tsv1.size());
 
             auto deflate_range=[&tsv1,&tsv2](size_t i0,size_t n) {

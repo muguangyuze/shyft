@@ -139,6 +139,13 @@ namespace shyft {
                 while (src != _key_tracker.rend()) *dst++ = *src++;
             }
 
+			/** scan items calling fx(key,vale) for each */
+			template <typename Fx>
+			void apply_to_items(Fx &&fx) const {
+				for (const auto& kv : _key_to_value) {
+					fx(kv.first, kv.second.first);
+				}
+			}
             /**adjust capacity, evict excessive items as needed */
             void set_capacity(size_t cap) {
                 if(cap==0) throw runtime_error("cache capacity must be >0");
@@ -150,6 +157,11 @@ namespace shyft {
             }
             size_t get_capacity() const {return _capacity;}
 
+			/** Flush cache */
+			void flush() {
+				_key_tracker.clear();
+				_key_to_value.clear();
+			}
             private:
 
                 /** Record a fresh key-value pair in the cache */
@@ -512,10 +524,7 @@ namespace shyft {
              */
             void flush() {
                 lock_guard<mutex> guard(mx);
-                vector<string> ids;
-                c.get_mru_keys(back_inserter(ids));
-                for (const auto&id:ids)
-                    c.remove_item(id);
+				c.flush();
             }
 
             /** Provide cache-statistics
@@ -525,14 +534,12 @@ namespace shyft {
             cache_stats get_cache_stats() {
                 lock_guard<mutex> guard(mx);
                 cache_stats r{ cs };
-                vector<string> ids;
-                c.get_mru_keys(back_inserter(ids));
-                r.id_count = ids.size();
-                for (const auto&id:ids) {
-                    const auto& ci = c.get_item(id);
-                    r.point_count += ci.estimate_size();
-                    r.fragment_count += ci.count_fragments();
-                }
+				auto fx = [&r](const string&key,const value_type& ci )->void {
+					r.point_count += ci.estimate_size();
+					r.fragment_count += ci.count_fragments();
+					++r.id_count;
+				};
+				c.apply_to_items(fx);
                 return r;
             }
 
